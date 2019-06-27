@@ -1,4 +1,4 @@
-<#
+﻿<#
 .VERSION
 1.0.4
 
@@ -12,7 +12,12 @@ if($headers){
 
 Try
 {
-    $FilePath = ".\Microsoft.IdentityModel.Clients.ActiveDirectory.dll"
+    # Install latest AD client library
+    $ADPackage = "Microsoft.IdentityModel.Clients.ActiveDirectory"
+    & nuget.exe install $ADPackage > nuget.log
+
+    # Target .NET Framework version of the DLL
+    $FilePath = (Get-Item .\\Microsoft.IdentityModel.Clients.ActiveDirectory.[0-9].[0-9].[0-9]\\lib\\net[0-9][0-9]\\Microsoft.IdentityModel.Clients.ActiveDirectory.dll).FullName | Resolve-Path -Relative
     Add-Type -Path $FilePath
 }
 Catch

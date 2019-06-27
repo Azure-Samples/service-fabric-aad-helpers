@@ -14,19 +14,12 @@ This project framework provides the following features:
 
 ### Prerequisites
 
-(ideally very short, if any)
-
-- OS
-- Library version
-- ...
+- Windows OS (.NET Framework is required)
+- [Nuget CLI](https://docs.microsoft.com/en-us/nuget/tools/nuget-exe-cli-reference) (`nuget.exe`)
 
 ### Installation
 
-(ideally very short)
-
-- npm install [package name]
-- mvn install
-- ...
+- `nuget install Microsoft.IdentityModel.Clients.ActiveDirectory`
 
 ### Quickstart
 (Add steps to get up and running quickly)
