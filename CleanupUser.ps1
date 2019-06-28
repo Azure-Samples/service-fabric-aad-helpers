@@ -15,7 +15,7 @@ Username of user to be deleted.
 Object ID of user to deleted.
 
 .PARAMETER Location
-Used to set metadata for specific region: china. Ignore it in global environment.
+Used to set metadata for specific region (for example: china, germany). Ignore it in global environment.
 
 .EXAMPLE
 . Scripts\CleanupUser.ps1 -TenantId '7b25ab7e-cd25-4f0c-be06-939424dc9cc9' -UserName 'SFAdmin'

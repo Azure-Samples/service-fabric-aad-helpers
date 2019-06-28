@@ -31,7 +31,7 @@ User is assigned admin app role if indicated; otherwise, readonly app role.
 Temporary variable of tenant setup result returned by SetupApplications.ps1.
 
 .PARAMETER Location
-Used to set metadata for specific region: china. Ignore it in global environment.
+Used to set metadata for specific region (for example: china, germany). Ignore it in global environment.
 
 .EXAMPLE
 . Scripts\SetupUser.ps1 -ConfigObj $ConfigObj -UserName 'SFuser' -Password 'Test4321'

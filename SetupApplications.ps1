@@ -28,7 +28,7 @@ Name of native client application representing client.
 A friendly Service Fabric cluster name. Application settings generated from cluster name: WebApplicationName = ClusterName + "_Cluster", NativeClientApplicationName = ClusterName + "_Client"
 
 .PARAMETER Location
-Used to set metadata for specific region: china. Ignore it in global environment.
+Used to set metadata for specific region (for example: china, germany). Ignore it in global environment.
 
 .PARAMETER AddResourceAccess
 Used to add the cluster application's resource access to "Windows Azure Active Directory" application explicitly when AAD is not able to add automatically. This may happen when the user account does not have adequate permission under this subscription.

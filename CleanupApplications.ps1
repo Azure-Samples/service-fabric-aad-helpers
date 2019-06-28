@@ -21,7 +21,7 @@ A friendly Service Fabric cluster name. Applications whose names starting with C
 Cleanup application related users if indicated.
 
 .PARAMETER Location
-Used to set metadata for specific region: china. Ignore it in global environment.
+Used to set metadata for specific region (for example: china, germany). Ignore it in global environment.
 
 .EXAMPLE
 . Scripts\CleanupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster'
