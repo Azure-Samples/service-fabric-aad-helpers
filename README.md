@@ -1,6 +1,6 @@
 # Service Fabric Azure AD helper scripts
 
-Here are PowerShell scripts for setting up Azure Active Directory (Azure AD) authentication before you create your Service Fabric cluster.
+Here are PowerShell scripts for setting up Azure Active Directory (Azure AD) to authenticate clients for a Service Fabric cluster (which must be done before creating the cluster).
 
 ## Features
 
