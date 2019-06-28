@@ -1,6 +1,6 @@
 # Service Fabric Azure AD helper scripts
 
-Here are PowerShell scripts for setting up Azure Active Directory (Azure AD) to authenticate clients for a Service Fabric cluster (which must be done before creating the cluster).
+PowerShell scripts for setting up Azure Active Directory (Azure AD) to authenticate clients for a Service Fabric cluster (which must be done *before* creating the cluster).
 
 ## Features
 
@@ -15,7 +15,7 @@ This repo provides the following scripts for Azure AD:
 
 ### Prerequisites
 
-- Windows OS (.NET Framework is required)
+- Windows OS
 - [Nuget CLI](https://docs.microsoft.com/en-us/nuget/tools/nuget-exe-cli-reference) (`nuget.exe`)
 - [Azure Active Directory (Azure AD) tenant](https://docs.microsoft.com/en-us/azure/active-directory/develop/quickstart-create-new-tenant)
 
