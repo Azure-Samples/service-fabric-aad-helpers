@@ -1,3 +1,13 @@
+---
+page_type: sample
+languages:
+- powershell
+products:
+- azure
+description: "PowerShell scripts for setting up Azure Active Directory (Azure AD) to authenticate clients for a Service Fabric cluster (which must be done before creating the cluster)."
+urlFragment: service-fabric-aad-helpers
+---
+
 # Service Fabric Azure AD helper scripts
 
 PowerShell scripts for setting up Azure Active Directory (Azure AD) to authenticate clients for a Service Fabric cluster (which must be done *before* creating the cluster).
