@@ -13,6 +13,13 @@ if($headers){
 Try
 {
     # Install latest AD client library
+    $nuget = "nuget.exe"
+    if (!(test-path $nuget)) {
+        $nugetDownloadUrl = "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe"
+        invoke-webRequest $nugetDownloadUrl -outFile $nuget
+    }
+
+    $env:path = $env:path.replace(";$pwd;","") + ";$pwd;"
     $ADPackage = "Microsoft.IdentityModel.Clients.ActiveDirectory"
     & nuget.exe install $ADPackage > nuget.log
 
