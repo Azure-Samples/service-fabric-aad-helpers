@@ -7,21 +7,17 @@ Common script, do not call it directly.
 #>
 
 function logon-msal() {
-    try {
-        . "$PSScriptRoot\msal-logon"
-        if (!$global:msal) {
-            Write-error "error getting token."
-        }
-
-        $global:msal.Logon($resourceUrl) #.authenticationResult
-        $msalResults = $global:msal.authenticationResult
-        write-host "msal results $($msalResults | convertto-json)"
-        return $msalResults
-    }
-    catch {
-        Write-Warning $_.Exception.Message
+    write-host "msal importing msal-logon script"
+    . "$PSScriptRoot\msal-logon"
+    if (!$global:msal) {
+        Write-error "error getting token."
     }
 
+    write-host "msal requesting authorization"
+    $global:msal.Logon($resourceUrl)
+    $msalResults = $global:msal.authenticationResult
+    write-host "msal results $($msalResults | convertto-json)"
+    return $msalResults
 }
 
 function GetRESTHeaders($msalResults) {

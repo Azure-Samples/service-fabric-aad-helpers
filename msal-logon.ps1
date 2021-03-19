@@ -129,10 +129,10 @@ class MsalLogon {
             write-verbose "token valid: $($this.authenticationResult.ExpiresOn). use -force to force logon"
             return $true
         }
-        return $this.LogonMsal($resourceUrl, @("$resourceUrl/msal.read", "$resourceUrl/msal.write"))
+        return $this.LogonMsal($resourceUrl, @())
     }
 
-    hidden [bool] LogonMsal([string]$resourceUrl, [string[]]$scopes) {
+    [bool] LogonMsal([string]$resourceUrl, [string[]]$scopes) {
         try {
             $error.Clear()
             [string[]]$defaultScope = @(".default")
@@ -204,7 +204,7 @@ class MsalLogon {
                     }
                 }
 
-                write-host "authentication result: $($this.authenticationResult)"
+                write-host "authentication result: $($this.authenticationResult|convertto-json)"
                 $account = $this.publicClientApplication.GetAccountsAsync().Result[0]
 
                 #add msal scopes after preauth
