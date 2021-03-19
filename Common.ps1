@@ -6,88 +6,63 @@
 Common script, do not call it directly.
 #>
 
-if($headers){
-    Exit
-}
+function logon-msal() {
+    try {
+        . "$PSScriptRoot\msal-logon"
+        if (!$global:msal) {
+            Write-error "error getting token."
+        }
 
-Try
-{
-    # Install latest AD client library
-    $nuget = "nuget.exe"
-    if (!(test-path $nuget)) {
-        $nugetDownloadUrl = "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe"
-        invoke-webRequest $nugetDownloadUrl -outFile $nuget
+        $global:msal.Logon($resourceUrl) #.authenticationResult
+        $msalResults = $global:msal.authenticationResult
+        write-host "msal results $($msalResults | convertto-json)"
+        return $msalResults
+    }
+    catch {
+        Write-Warning $_.Exception.Message
     }
 
-    $env:path = $env:path.replace(";$pwd;","") + ";$pwd;"
-    $ADPackage = "Microsoft.IdentityModel.Clients.ActiveDirectory"
-    & nuget.exe install $ADPackage > nuget.log
-
-    # Target .NET Framework version of the DLL
-    $FilePath = (Get-Item .\\Microsoft.IdentityModel.Clients.ActiveDirectory.[0-9].[0-9].[0-9]\\lib\\net[0-9][0-9]\\Microsoft.IdentityModel.Clients.ActiveDirectory.dll).FullName | Resolve-Path -Relative
-    Add-Type -Path $FilePath
-}
-Catch
-{
-    Write-Warning $_.Exception.Message
 }
 
-function GetRESTHeaders()
-{
-	# Use common client 
-    $clientId = "1950a258-227b-4e31-a9cf-717495945fc2"
-    $redirectUrl = "urn:ietf:wg:oauth:2.0:oob"
-    
-    $authenticationContext = New-Object Microsoft.IdentityModel.Clients.ActiveDirectory.AuthenticationContext -ArgumentList $authString, $FALSE
-    
-    $PromptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::RefreshSession
-    $PlatformParameters = New-Object Microsoft.IdentityModel.Clients.ActiveDirectory.PlatformParameters -ArgumentList $PromptBehavior
-    $accessToken = $authenticationContext.AcquireTokenAsync($resourceUrl, $clientId, $redirectUrl, $PlatformParameters).Result.AccessToken
-
+function GetRESTHeaders($msalResults) {
     $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
-    $headers.Add("Authorization", $accessToken)
+    $headers.Add("Authorization", $msalResults.accessToken)
     return $headers
 }
 
-function CallGraphAPI($uri, $headers, $body, $method = "Post")
-{
+function CallGraphAPI($uri, $headers, $body, $method = "Post") {
     $json = $body | ConvertTo-Json -Depth 4 -Compress
     return (Invoke-RestMethod $uri -Method $method -Headers $headers -Body $json -ContentType "application/json")
 }
 
-function AssertNotNull($obj, $msg){
-    if($obj -eq $null -or $obj.Length -eq 0){ 
+function AssertNotNull($obj, $msg) {
+    if ($obj -eq $null -or $obj.Length -eq 0) { 
         Write-Warning $msg
         Exit
     }
 }
 
 # Regional settings
-switch ($Location)
-{
-    "china"
-    {
+switch ($Location) {
+    "china" {
         $resourceUrl = "https://graph.chinacloudapi.cn"
         $authString = "https://login.partner.microsoftonline.cn/" + $TenantId
     }
     
-    "germany"
-    {
+    "germany" {
         $resourceUrl = "https://graph.cloudapi.de"
         $authString = "https://login.microsoftonline.de/" + $TenantId   
     }
 
-    default
-    {
+    default {
         $resourceUrl = "https://graph.windows.net"
         $authString = "https://login.microsoftonline.com/" + $TenantId
     }
 }
 
-$headers = GetRESTHeaders
+$headers = GetRESTHeaders -msalResults (logon-msal)
 
-if ($ClusterName)
-{
+if ($ClusterName) {
     $WebApplicationName = $ClusterName + "_Cluster"
     $WebApplicationUri = "https://$ClusterName"
     $NativeClientApplicationName = $ClusterName + "_Client"
