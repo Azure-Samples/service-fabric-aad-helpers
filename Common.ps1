@@ -12,13 +12,9 @@ if ($headers) {
 
 Try {
     # Install latest AD client library
-    # check for cloudshell 
-    $cloudShellDll = '/lib/azure-functions-core-tools/Microsoft.IdentityModel.Clients.ActiveDirectory.dll'
-    
-    if ($PSVersionTable.Platform -ieq 'unix' -and (test-path $cloudShellDll)) {
-        $FilePath = $cloudShellDll
-    }
-    else {
+    # check for cloudshell https://shell.azure.com
+
+    if (!([microsoft.identity.client.azureCloudInstance])) {
         $nuget = "nuget.exe"
         if (!(test-path $nuget)) {
             $nugetDownloadUrl = "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe"
@@ -31,8 +27,8 @@ Try {
 
         # Target .NET Framework version of the DLL
         $FilePath = (Get-Item .\\Microsoft.IdentityModel.Clients.ActiveDirectory.[0-9].[0-9].[0-9]\\lib\\net[0-9][0-9]\\Microsoft.IdentityModel.Clients.ActiveDirectory.dll).FullName | Resolve-Path -Relative
+        Add-Type -Path $FilePath
     }
-    Add-Type -Path $FilePath
 }
 Catch {
     Write-Warning $_.Exception.Message
@@ -43,20 +39,25 @@ function GetRESTHeaders() {
     $clientId = "1950a258-227b-4e31-a9cf-717495945fc2"
     $redirectUrl = "urn:ietf:wg:oauth:2.0:oob"
     
-    $authenticationContext = New-Object Microsoft.IdentityModel.Clients.ActiveDirectory.AuthenticationContext -ArgumentList $authString, $FALSE
+    if ([microsoft.identity.client.azureCloudInstance]) {
+        $token = GetRESTHeadersCloud
+    }
+    else {
+        $token = GetRESTHeadersADAL
+    }
     
-    $PromptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::RefreshSession
-    $PlatformParameters = New-Object Microsoft.IdentityModel.Clients.ActiveDirectory.PlatformParameters -ArgumentList $PromptBehavior
-    $accessToken = $authenticationContext.AcquireTokenAsync($resourceUrl, $clientId, $redirectUrl, $PlatformParameters).Result.AccessToken
+    $authHeader = @{
+        'Content-Type'='application/json'
+        'Authorization'='Bearer ' + $token
+    }
 
-    $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
-    $headers.Add("Authorization", $accessToken)
-    return $headers
+    return $authHeader
 }
 
 function CallGraphAPI($uri, $headers, $body, $method = "Post") {
     $json = $body | ConvertTo-Json -Depth 4 -Compress
-    return (Invoke-RestMethod $uri -Method $method -Headers $headers -Body $json -ContentType "application/json")
+    write-host "Invoke-RestMethod $uri -Method $method -Headers $($headers | convertto-json) -Body $($body | convertto-json)"
+    return (Invoke-RestMethod $uri -Method $method -Headers $headers -Body $json)
 }
 
 function AssertNotNull($obj, $msg) {
@@ -64,6 +65,27 @@ function AssertNotNull($obj, $msg) {
         Write-Warning $msg
         Exit
     }
+}
+
+function GetRESTHeadersADAL() {
+    $authenticationContext = New-Object Microsoft.IdentityModel.Clients.ActiveDirectory.AuthenticationContext -ArgumentList $authString, $FALSE
+    
+    $PromptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::RefreshSession
+    $PlatformParameters = New-Object Microsoft.IdentityModel.Clients.ActiveDirectory.PlatformParameters -ArgumentList $PromptBehavior
+    $accessToken = $authenticationContext.AcquireTokenAsync($resourceUrl, $clientId, $redirectUrl, $PlatformParameters).Result.AccessToken
+    return $accessToken
+}
+
+function GetRESTHeadersCloud() { 
+    # https://docs.microsoft.com/en-us/azure/cloud-shell/msi-authorization
+    $response = invoke-webRequest -method post `
+        -uri 'http://localhost:50342/oauth2/token' `
+        -body "resource=$resourceUrl" `
+        -header @{'metadata'='true' }
+
+    write-host $response | convertto-json
+    $token = ($response | convertfrom-json).access_token
+    return $token
 }
 
 # Regional settings
