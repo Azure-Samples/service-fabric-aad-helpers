@@ -79,7 +79,6 @@ Param
 
     [Parameter(ParameterSetName='Prefix')]
     [Parameter(ParameterSetName='Customize')]
-    [ValidateSet('china','germany')]
     [String]
     $Location,
 
