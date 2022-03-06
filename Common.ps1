@@ -35,7 +35,7 @@ function main () {
         Write-Warning $_.Exception.Message
     }
 
-    return GetRESTHeaders
+    return get-RESTHeaders
 }
 
 function get-cloudInstance() {
@@ -44,16 +44,16 @@ function get-cloudInstance() {
     return $isCloudInstance
 }
 
-function GetRESTHeaders() {
+function get-RESTHeaders() {
     # Use common client 
     $clientId = "1950a258-227b-4e31-a9cf-717495945fc2"
     $redirectUrl = "urn:ietf:wg:oauth:2.0:oob"
     
     if (get-cloudInstance) {
-        $token = GetRESTHeadersCloud
+        $token = get-RESTHeadersCloud
     }
     else {
-        $token = GetRESTHeadersADAL
+        $token = get-RESTHeadersADAL
     }
     
     $authHeader = @{
@@ -78,7 +78,7 @@ function AssertNotNull($obj, $msg) {
     }
 }
 
-function GetRESTHeadersADAL() {
+function get-RESTHeadersADAL() {
     $authenticationContext = New-Object Microsoft.IdentityModel.Clients.ActiveDirectory.AuthenticationContext -ArgumentList $authString, $FALSE
     
     $PromptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::RefreshSession
@@ -87,7 +87,7 @@ function GetRESTHeadersADAL() {
     return $accessToken
 }
 
-function GetRESTHeadersCloud() { 
+function get-RESTHeadersCloud() { 
     # https://docs.microsoft.com/en-us/azure/cloud-shell/msi-authorization
     $response = invoke-webRequest -method post `
         -uri 'http://localhost:50342/oauth2/token' `
@@ -106,9 +106,9 @@ switch ($Location) {
         $authString = "https://login.partner.microsoftonline.cn/" + $TenantId
     }
     
-    "germany" {
-        $resourceUrl = "https://graph.cloudapi.de"
-        $authString = "https://login.microsoftonline.de/" + $TenantId   
+    "us" {
+        $resourceUrl = "https://graph.windows.net"
+        $authString = "https://login.microsoftonline.us/" + $TenantId   
     }
 
     default {
@@ -121,6 +121,6 @@ $headers = main
 
 if ($ClusterName) {
     $WebApplicationName = $ClusterName + "_Cluster"
-    $WebApplicationUri = "https://$ClusterName"
+    #$WebApplicationUri = "https://$ClusterName"
     $NativeClientApplicationName = $ClusterName + "_Client"
 }

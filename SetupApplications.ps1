@@ -61,7 +61,8 @@ Param
 	$WebApplicationName,
 
     [Parameter(ParameterSetName='Customize')]
-	[String]
+    [Parameter(ParameterSetName='Prefix')]
+    [String]
 	$WebApplicationUri,
 
     [Parameter(ParameterSetName='Customize',Mandatory=$true)]
@@ -79,6 +80,7 @@ Param
 
     [Parameter(ParameterSetName='Prefix')]
     [Parameter(ParameterSetName='Customize')]
+    [ValidateSet('us','china')]
     [String]
     $Location,
 

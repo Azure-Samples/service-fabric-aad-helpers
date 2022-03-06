@@ -75,7 +75,7 @@ Param
 
     [Parameter(ParameterSetName='Setting')]
     [Parameter(ParameterSetName='ConfigObj')]
-    [ValidateSet('china')]
+    [ValidateSet('us','china')]
     [String]
     $Location
 )
