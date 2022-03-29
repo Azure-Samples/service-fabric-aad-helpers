@@ -87,12 +87,7 @@ Param
     [Parameter(ParameterSetName='Customize')]
     [Parameter(ParameterSetName='Prefix')]
     [Switch]
-    $AddResourceAccess, 
-    [Parameter(ParameterSetName='Customize')]
-    [Parameter(ParameterSetName='Prefix')]
-    [String]
-    [ValidateSet('AzureADMyOrg','AzureADMultipleOrgs')]
-	$supportedAccountType = 'AzureADMyOrg' # single tenant
+    $AddResourceAccess
 )
 
 Write-Host 'TenantId = ' $TenantId
@@ -158,7 +153,6 @@ If($AddResourceAccess)
         replyUrls = @($WebApplicationReplyUrl)
         appRoles = $appRole
         requiredResourceAccess = $requiredResourceAccess
-        signInAudience = $supportedAccountType
     }
 }
 Else
@@ -169,7 +163,6 @@ Else
         homepage = $WebApplicationReplyUrl #Not functionally needed. Set by default to avoid AAD portal UI displaying error
         replyUrls = @($WebApplicationReplyUrl)
         appRoles = $appRole
-        signInAudience = $supportedAccountType
     }
 }
 
