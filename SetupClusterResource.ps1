@@ -11,7 +11,7 @@ v 1.1
     -clusterApplication e6bba8d5-3fb6-47ac-9927-2a50cf763d36 `
     -clientApplication 2324af84-f14b-4ee8-a695-6b464f8dbb92 `
     -resourceGroupName 'mysftestcluster' `
-    -cluster 'mysftestcluster'
+    -clusterName 'mysftestcluster'
 #>
 
 param(
@@ -24,7 +24,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$resourceGroupName = '',
     [Parameter(Mandatory = $true)]
-    [string]$cluster = '',
+    [string]$clusterName = '',
     [string]$deploymentName = "add-azureactivedirectory-$((get-date).tostring('yy-MM-dd-HH-mm-ss'))",
     [string]$templateFile = "$pwd\template-$deploymentName.json",
     [switch]$whatIf,
@@ -58,7 +58,7 @@ if (!(get-command get-azcontext)) {
 
 if (!(Get-AzContext)) { Connect-AzAccount }
 
-$resources = @(get-azresource -Name $cluster | Where-Object ResourceType -imatch 'Microsoft.ServiceFabric')
+$resources = @(get-azresource -Name $clusterName | Where-Object ResourceType -imatch 'Microsoft.ServiceFabric')
 
 if ($resources.Count -ne 1) {
     write-error "unable to find cluster $(resources)"
