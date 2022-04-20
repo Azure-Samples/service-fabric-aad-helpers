@@ -40,7 +40,7 @@ param(
     
     [Parameter(ParameterSetName='values')]
     [Parameter(ParameterSetName='customobj')]
-    [string]$templateFile = "$pwd\template-$deploymentName.json",
+    [string]$templateFile = "$pwd/template-$deploymentName.json",
     
     [Parameter(ParameterSetName='values')]
     [Parameter(ParameterSetName='customobj')]
@@ -130,7 +130,7 @@ if (!($clusterObj.properties.azureActiveDirectory)) {
 }
 else {
     write-warning "modifying $($clusterObj.properties.azureActiveDirectory)"
-    $clusterObj.properties.azureActiveDirectory = $azureActiveDirectory
+    $clusterObj.properties.azureActiveDirectory = $azureActiveDirectory.azureActiveDirectory
 }
 
 $templateJson = $global:templateObj | convertto-json -depth 99
@@ -156,7 +156,8 @@ else {
     write-host "template valid: $templateFile" -ForegroundColor Green
 }
 
-write-host "New-AzResourceGroupDeployment -Name `"$deploymentName`" ``
+write-host "
+New-AzResourceGroupDeployment -Name `"$deploymentName`" ``
     -ResourceGroupName $resourceGroupName ``
     -Mode Incremental ``
     -DeploymentDebugLogLevel All ``
