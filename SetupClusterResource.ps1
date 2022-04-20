@@ -15,24 +15,50 @@ v 1.1
 #>
 
 param(
-    [Parameter(Mandatory = $true)]
+    [Parameter(ParameterSetName='customobj',Mandatory = $true)]
+    [hashtable]$configObj = @{},
+
+    [Parameter(ParameterSetName='values',Mandatory = $true)]
     [string]$tenantId = '', # guid
-    [Parameter(Mandatory = $true)]
+    
+    [Parameter(ParameterSetName='values',Mandatory = $true)]
     [string]$clusterApplication = '', # guid
-    [Parameter(Mandatory = $true)]
+    
+    [Parameter(ParameterSetName='values',Mandatory = $true)]
     [string]$clientApplication = '', # guid
-    [Parameter(Mandatory = $true)]
+    
+    [Parameter(ParameterSetName='values',Mandatory = $true)]
+    [Parameter(ParameterSetName='customobj',Mandatory = $true)]
     [string]$resourceGroupName = '',
-    [Parameter(Mandatory = $true)]
+    
+    [Parameter(ParameterSetName='values',Mandatory = $true)]
     [string]$clusterName = '',
+
+    [Parameter(ParameterSetName='values')]
+    [Parameter(ParameterSetName='customobj')]
     [string]$deploymentName = "add-azureactivedirectory-$((get-date).tostring('yy-MM-dd-HH-mm-ss'))",
+    
+    [Parameter(ParameterSetName='values')]
+    [Parameter(ParameterSetName='customobj')]
     [string]$templateFile = "$pwd\template-$deploymentName.json",
+    
+    [Parameter(ParameterSetName='values')]
+    [Parameter(ParameterSetName='customobj')]
     [switch]$whatIf,
+    
+    [Parameter(ParameterSetName='values')]
+    [Parameter(ParameterSetName='customobj')]
     [switch]$force
 )
 
 $PSModuleAutoLoadingPreference = 2
-#$ErrorActionPreference = 'continue'
+
+if($configObj) {
+    write-host "using configobj"
+    $tenantId = $configObj.TenantId
+    $clusterApplication = $configObj.WebAppId
+    $clientApplication = $configObj.NativeClientAppId
+}
 
 $azureActiveDirectory = @{ 
     azureActiveDirectory = @{

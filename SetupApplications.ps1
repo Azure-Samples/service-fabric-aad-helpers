@@ -95,7 +95,7 @@ Write-Host 'TenantId = ' $TenantId
 . "$PSScriptRoot\Common.ps1"
 
 $graphAPIFormat = $resourceUrl + "/" + $TenantId + "/{0}?api-version=1.5"
-$ConfigObj = @{}
+$global:ConfigObj = @{}
 $ConfigObj.TenantId = $TenantId
 
 $appRole = 
