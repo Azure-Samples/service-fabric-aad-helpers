@@ -58,6 +58,7 @@ if($configObj) {
     $tenantId = $configObj.TenantId
     $clusterApplication = $configObj.WebAppId
     $clientApplication = $configObj.NativeClientAppId
+    $clusterName = $configObj.ClusterName
 }
 
 $azureActiveDirectory = @{ 

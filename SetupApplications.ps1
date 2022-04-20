@@ -96,6 +96,7 @@ Write-Host 'TenantId = ' $TenantId
 
 $graphAPIFormat = $resourceUrl + "/" + $TenantId + "/{0}?api-version=1.5"
 $global:ConfigObj = @{}
+$ConfigObj.ClusterName = $clusterName
 $ConfigObj.TenantId = $TenantId
 
 $appRole = 
