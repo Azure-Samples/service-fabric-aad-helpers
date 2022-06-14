@@ -101,26 +101,23 @@ $global:ConfigObj = @{}
 $ConfigObj.ClusterName = $clusterName
 $ConfigObj.TenantId = $TenantId
 
-$appRole = 
-@{
+$appRole = @(@{
     allowedMemberTypes = @("User")
     description        = "ReadOnly roles have limited query access"
     displayName        = "ReadOnly"
     id                 = [guid]::NewGuid()
     isEnabled          = "true"
     value              = "User"
-},
-@{
+},@{
     allowedMemberTypes = @("User")
     description        = "Admins can manage roles and perform all task actions"
     displayName        = "Admin"
     id                 = [guid]::NewGuid()
     isEnabled          = "true"
     value              = "Admin"
-}
+})
 
-$requiredResourceAccess =
-@(@{
+$requiredResourceAccess = @(@{
         resourceAppId  = "00000002-0000-0000-c000-000000000000"
         resourceAccess = @(@{
                 id   = "311a71cc-e848-46a1-bdf8-97ff7156d8e6"
@@ -203,15 +200,16 @@ else {
     $patchApplicationUri = $graphAPIFormat -f ("applications/{0}" -f $webApp.Id)
     $webApp.api.oauth2PermissionScopes = @($webApp.api.oauth2PermissionScopes)
     $webApp.api.oauth2PermissionScopes += @{
-        "id"                      = [guid]::NewGuid()
-        "isEnabled"               = $true
-        "type"                    = "User"
-        "adminConsentDescription" = "Allow the application to access $WebApplicationName on behalf of the signed-in user."
-        "adminConsentDisplayName" = "Access $WebApplicationName"
-        "userConsentDescription"  = "Allow the application to access $WebApplicationName on your behalf."
-        "userConsentDisplayName"  = "Access $WebApplicationName"
-        "value"                   = "user_impersonation"
+        id                      = [guid]::NewGuid()
+        isEnabled               = $true
+        type                    = "User"
+        adminConsentDescription = "Allow the application to access $WebApplicationName on behalf of the signed-in user."
+        adminConsentDisplayName = "Access $WebApplicationName"
+        userConsentDescription  = "Allow the application to access $WebApplicationName on your behalf."
+        userConsentDisplayName  = "Access $WebApplicationName"
+        value                   = "user_impersonation"
     }
+
     call-graphApi -uri $patchApplicationUri -method "Patch" -headers $headers -body @{
         "oauth2PermissionScopes" = $webApp.api.oauth2PermissionScopes
     }
@@ -220,10 +218,10 @@ else {
 #Service Principal
 $uri = [string]::Format($graphAPIFormat, "servicePrincipals")
 $servicePrincipal = @{
-    accountEnabled            = "true"
+    accountEnabled            = $true
     appId                     = $webApp.appId
     displayName               = $webApp.displayName
-    appRoleAssignmentRequired = "true"
+    appRoleAssignmentRequired = $true
 }
 $servicePrincipal = call-graphApi $uri $headers $servicePrincipal
 $ConfigObj.ServicePrincipalId = $servicePrincipal.objectId
@@ -239,7 +237,7 @@ $nativeAppResourceAccess = $requiredResourceAccess +=
         })
 }
 $nativeApp = @{
-    publicClient           = "true"
+    publicClient           = $true
     displayName            = $NativeClientApplicationName
     replyUrls              = @("urn:ietf:wg:oauth:2.0:oob")
     requiredResourceAccess = $nativeAppResourceAccess
@@ -290,7 +288,7 @@ $ConfigObj
 Write-Host
 Write-Host '-----ARM template-----'
 Write-Host '"azureActiveDirectory": {'
-Write-Host ("  `"tenantId`":`"{0}`"," -f $ConfigObj.TenantId)
-Write-Host ("  `"clusterApplication`":`"{0}`"," -f $ConfigObj.WebAppId)
-Write-Host ("  `"clientApplication`":`"{0}`"" -f $ConfigObj.NativeClientAppId)
+Write-Host "  `"tenantId`":`"$($ConfigObj.TenantId)`","
+Write-Host "  `"clusterApplication`":`"$($ConfigObj.WebAppId)`","
+Write-Host "  `"clientApplication`":`"$($ConfigObj.NativeClientAppId)`""
 Write-Host "},"
