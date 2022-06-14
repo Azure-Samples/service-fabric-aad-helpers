@@ -66,9 +66,16 @@ function get-RESTHeaders() {
 }
 
 function CallGraphAPI($uri, $headers, $body, $method = "Post") {
-    $json = $body | ConvertTo-Json -Depth 4 -Compress
-    write-host "Invoke-RestMethod $uri -Method $method -Headers $($headers | convertto-json) -Body $($body | convertto-json)"
-    return (Invoke-RestMethod $uri -Method $method -Headers $headers -Body $json)
+    try {
+        $error.clear()
+        $json = $body | ConvertTo-Json -Depth 99 -Compress
+        write-host "Invoke-RestMethod $uri -Method $method -Headers $($headers | convertto-json) -Body $($body | convertto-json -depth 99)"
+        return (Invoke-RestMethod $uri -Method $method -Headers $headers -Body $json)
+    }
+    catch {
+        write-warning "CallGraphAPI exception:$($error | out-string)"
+        return $null
+    }
 }
 
 function AssertNotNull($obj, $msg) {
@@ -112,7 +119,7 @@ switch ($Location) {
     }
 
     default {
-        $resourceUrl = "https://graph.windows.net"
+        $resourceUrl = "https://graph.microsoft.com"
         $authString = "https://login.microsoftonline.com/" + $TenantId
     }
 }

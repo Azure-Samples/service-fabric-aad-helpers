@@ -94,7 +94,9 @@ Write-Host 'TenantId = ' $TenantId
 
 . "$PSScriptRoot\Common.ps1"
 
-$graphAPIFormat = $resourceUrl + "/" + $TenantId + "/{0}?api-version=1.5"
+#$graphAPIFormat = $resourceUrl + "/" + $TenantId + "/{0}?api-version=1.5"
+$graphAPIFormat = $resourceUrl + "/v1.0/" + $TenantId + "/{0}"
+
 $global:ConfigObj = @{}
 $ConfigObj.ClusterName = $clusterName
 $ConfigObj.TenantId = $TenantId
@@ -141,44 +143,65 @@ if (!$NativeClientApplicationName)
 	$NativeClientApplicationName =  "ServiceFabricClusterNativeClient"
 }
 
-#Create Web Application
-$uri = [string]::Format($graphAPIFormat, "applications")
-
-$webApp = @{}
-If($AddResourceAccess)
-{
-    $webApp = @{
-        displayName = $WebApplicationName
-        identifierUris = @($WebApplicationUri)
-        homepage = $WebApplicationReplyUrl #Not functionally needed. Set by default to avoid AAD portal UI displaying error
-        replyUrls = @($WebApplicationReplyUrl)
-        appRoles = $appRole
-        requiredResourceAccess = $requiredResourceAccess
-    }
+# check for existing app by identifieruri
+$uri = [string]::Format($graphAPIFormat, "applications?`$search=`"identifierUris:$WebApplicationUri`"")
+$eventualHeaders = $headers.clone()
+[void]$eventualHeaders.Add('ConsistencyLevel' , 'eventual')
+$webApp = (CallGraphAPI $uri -headers $eventualHeaders -body "" -method 'get').value
+write-host "currentAppRegistration:$currentAppRegistration"
+if($webApp) {
+    write-host "app registration with $WebApplicationUri already exists." -foregroundcolor yellow
+    write-host "currentAppRegistration:$($webApp|convertto-json -depth 99)"
 }
-Else
-{
-    $webApp = @{
-        displayName = $WebApplicationName
-        identifierUris = @($WebApplicationUri)
-        homepage = $WebApplicationReplyUrl #Not functionally needed. Set by default to avoid AAD portal UI displaying error
-        replyUrls = @($WebApplicationReplyUrl)
-        appRoles = $appRole
+else {
+    #Create Web Application
+    $uri = [string]::Format($graphAPIFormat, "applications")
+
+    $webApp = @{}
+    $webAppResource = @{
+                homePageUrl = $WebApplicationReplyUrl
+                redirectUris = @($WebApplicationReplyUrl)
+                implicitGrantSettings = @{
+                    enableAccessTokenIssuance = $false
+                    enableIdTokenIssuance = $true
+                }
+            }
+    If($AddResourceAccess)
+    {
+        $webApp = @{
+            displayName = $WebApplicationName
+            identifierUris = @($WebApplicationUri)
+            defaultRedirectUri = $WebApplicationReplyUrl
+            appRoles = $appRole
+            requiredResourceAccess = $requiredResourceAccess
+            web = $webAppResource
+        }
     }
+    Else
+    {
+        $webApp = @{
+            displayName = $WebApplicationName
+            identifierUris = @($WebApplicationUri)
+            defaultRedirectUri = $WebApplicationReplyUrl
+            appRoles = $appRole
+            web = $webAppResource
+        }
+    }
+    
+    $webApp = CallGraphAPI -uri $uri -headers $headers -body $webApp
 }
 
-$webApp = CallGraphAPI $uri $headers $webApp
 AssertNotNull $webApp 'Web Application Creation Failed'
 $ConfigObj.WebAppId = $webApp.appId
 Write-Host 'Web Application Created:' $webApp.appId
 
 # Check for an existing delegated permission with value "user_impersonation". Normally this is created by default,
 # but if it isn't, we need to update the Application object with a new one.
-$user_impersonation_scope = $webApp.oauth2Permissions | Where-Object { $_.value -eq "user_impersonation" }
+$user_impersonation_scope = $webApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq "user_impersonation" }
 if (-not $user_impersonation_scope) {
-    $patchApplicationUri = $graphAPIFormat -f ("applications/{0}" -f $webApp.objectId)
-    $webApp.oauth2Permissions = @($webApp.oauth2Permissions)
-    $webApp.oauth2Permissions += @{
+    $patchApplicationUri = $graphAPIFormat -f ("applications/{0}" -f $webApp.Id)    
+    $webApp.api.oauth2PermissionScopes = @($webApp.api.oauth2PermissionScopes)
+    $webApp.api.oauth2PermissionScopes += @{
         "id" = [guid]::NewGuid()
         "isEnabled" = $true
         "type" = "User"
@@ -189,7 +212,7 @@ if (-not $user_impersonation_scope) {
         "value" = "user_impersonation"
     }
     CallGraphAPI -uri $patchApplicationUri -method "Patch" -headers $headers -body @{ 
-        "oauth2Permissions" = $webApp.oauth2Permissions
+        "oauth2PermissionScopes" = $webApp.api.oauth2PermissionScopes
     }
 }
 
