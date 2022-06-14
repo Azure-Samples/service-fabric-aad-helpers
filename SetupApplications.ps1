@@ -126,7 +126,7 @@ function main () {
 
     # check / add app registration
     $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri -eventualHeaders $eventualHeaders
-    if (!webApp) {
+    if (!$webApp) {
         $webApp = add-appRegistration -WebApplicationUri $WebApplicationUri `
             -WebApplicationReplyUrl $WebApplicationReplyUrl `
             -requiredResourceAccess $requiredResourceAccess
@@ -137,10 +137,12 @@ function main () {
     Write-Host "Web Application Created: $($webApp.appId)"
 
     # check / add oauth user_impersonation permissions
-    if (!get-OauthPermissions -webApp $webApp) {
-        $result = add-OauthPermissions -webApp $webApp
+    $oauthPermissions = get-OauthPermissions -webApp $webApp
+    if (!$oauthPermissions) {
+        $oauthPermissions = add-OauthPermissions -webApp $webApp
     }
-    assert-notNull $result 'Web Application Oauth permissions Failed'
+    assert-notNull $oauthPermissions 'Web Application Oauth permissions Failed'
+    Write-Host "Web Application Oauth permissions created: $($oauthPermissions|convertto-json)"  -ForegroundColor Green
 
     # check / add servicePrincipal
     $servicePrincipal = get-servicePrincipal -webApp $webApp -eventualHeaders $eventualHeaders
@@ -148,16 +150,16 @@ function main () {
         $servicePrincipal = add-servicePrincipal -webApp $webApp
     }
     assert-notNull $servicePrincipal 'service principal configuration failed'
-    Write-Host 'Service Principal Created:' $servicePrincipal.appId
+    Write-Host "Service Principal Created: $($servicePrincipal.appId)" -ForegroundColor Green
     $configObj.ServicePrincipalId = $servicePrincipal.objectId
 
     # check / add native app
     $nativeApp = get-nativeClient -webApp $webApp -WebApplicationUri $WebApplicationUri -eventualHeaders $eventualHeaders
     if (!$nativeApp) {
-        $nativeApp = add-nativeClient
+        $nativeApp = add-nativeClient -webApp $webApp -requiredResourceAccess $requiredResourceAccess
     }
     assert-notNull $nativeApp 'Native Client Application Creation Failed'
-    Write-Host 'Native Client Application Created:' $nativeApp.appId
+    Write-Host "Native Client Application Created: $($nativeApp.appId)"  -ForegroundColor Green
     $configObj.NativeClientAppId = $nativeApp.appId
 
     # check / add native app service principal
@@ -166,14 +168,15 @@ function main () {
         $servicePrincipalNa = add-servicePrincipal -webApp $nativeApp
     }
     assert-notNull $servicePrincipalNa 'native app service principal configuration failed'
+    Write-Host "Native app service principal created: $($servicePrincipalNa.appId)" -ForegroundColor Green
 
     # check / add native app service principal
-    $servicePrincipalAAD = get-servicePrincipal -servicePrincipalNa $nativeApp -eventualHeaders $eventualHeaders
+    $servicePrincipalAAD = get-servicePrincipalAAD -servicePrincipalNa $servicePrincipalNa -eventualHeaders $eventualHeaders
     if (!$servicePrincipalAAD) {
-        $servicePrincipalAAD = add-servicePrincipalAAD -servicePrincipalNa $nativeApp -servicePrincipal $configObj.ServicePrincipalId
+        $servicePrincipalAAD = add-servicePrincipalAAD -servicePrincipalNa $servicePrincipalNa -servicePrincipal $configObj.ServicePrincipalId
     }
     assert-notNull $servicePrincipalAAD 'aad app service principal configuration failed'
-    Write-Host 'AADP Application Created:' $servicePrincipalAAD.appId
+    Write-Host "AADP Application Created: $($servicePrincipalAAD.appId)"  -ForegroundColor Green
     write-host "configobj: $($configObj|convertto-json)"
 
     #ARM template
@@ -260,7 +263,7 @@ function get-OauthPermissions($webApp) {
     # but if it isn't, we need to update the Application object with a new one.
     $user_impersonation_scope = $webApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq "user_impersonation" }
     if ($user_impersonation_scope) {
-        write-host "user_impersonation scope already exists."
+        write-host "user_impersonation scope already exists." -ForegroundColor yellow
         return $true
     }
 
@@ -358,7 +361,7 @@ function add-nativeClient($webApp, $requiredResourceAccess) {
 }
 
 function get-servicePrincipalAAD() {
-
+    return $null
 }
 
 function add-servicePrincipalAAD($servicePrincipalNa, $servicePrincipal ) {
