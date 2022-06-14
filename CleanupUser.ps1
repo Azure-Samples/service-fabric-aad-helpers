@@ -60,7 +60,7 @@ if($UserName)
 {
     $uri = [string]::Format($graphAPIFormat, "users", [string]::Format('&$filter=displayName eq ''{0}''', $UserName))
     $UserObjectId = (Invoke-RestMethod $uri -Headers $headers).value.objectId
-    AssertNotNull $UserObjectId 'User is not found'
+    assert-notNull $UserObjectId 'User is not found'
 }
 
 Write-Host 'Deleting User objectId = '$UserObjectId

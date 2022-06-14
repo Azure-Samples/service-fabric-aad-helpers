@@ -38,6 +38,26 @@ function main () {
     return get-RESTHeaders
 }
 
+function assert-notNull($obj, $msg) {
+    if ($obj -eq $null -or $obj.Length -eq 0) { 
+        Write-Warning $msg
+        exit
+    }
+}
+
+function call-graphApi($uri, $headers, $body, $method = "Post") {
+    try {
+        $error.clear()
+        $json = $body | ConvertTo-Json -Depth 99 -Compress
+        write-host "Invoke-RestMethod $uri -Method $method -Headers $($headers | convertto-json) -Body $($body | convertto-json -depth 99)"
+        return (Invoke-RestMethod $uri -Method $method -Headers $headers -Body $json)
+    }
+    catch {
+        write-warning "call-graphApi exception:`r`n$($_.Exception.Message)`r`n$($error | out-string)"
+        return $null
+    }
+}
+
 function get-cloudInstance() {
     $isCloudInstance = $PSVersionTable.Platform -ieq 'unix' -and ($env:ACC_CLOUD)
     write-host "cloud instance: $isCloudInstance"
@@ -65,32 +85,12 @@ function get-RESTHeaders() {
     return $authHeader
 }
 
-function CallGraphAPI($uri, $headers, $body, $method = "Post") {
-    try {
-        $error.clear()
-        $json = $body | ConvertTo-Json -Depth 99 -Compress
-        write-host "Invoke-RestMethod $uri -Method $method -Headers $($headers | convertto-json) -Body $($body | convertto-json -depth 99)"
-        return (Invoke-RestMethod $uri -Method $method -Headers $headers -Body $json)
-    }
-    catch {
-        write-warning "CallGraphAPI exception:$($error | out-string)"
-        return $null
-    }
-}
-
-function AssertNotNull($obj, $msg) {
-    if ($obj -eq $null -or $obj.Length -eq 0) { 
-        Write-Warning $msg
-        Exit
-    }
-}
-
 function get-RESTHeadersADAL() {
-    $authenticationContext = New-Object Microsoft.IdentityModel.Clients.ActiveDirectory.AuthenticationContext -ArgumentList $authString, $FALSE
-    
-    $PromptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::RefreshSession
-    $PlatformParameters = New-Object Microsoft.IdentityModel.Clients.ActiveDirectory.PlatformParameters -ArgumentList $PromptBehavior
-    $accessToken = $authenticationContext.AcquireTokenAsync($resourceUrl, $clientId, $redirectUrl, $PlatformParameters).Result.AccessToken
+    $authenticationContext = [Microsoft.IdentityModel.Clients.ActiveDirectory.AuthenticationContext]::new($authString, $false)
+    $promptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::RefreshSession
+    $platformParameters = [Microsoft.IdentityModel.Clients.ActiveDirectory.PlatformParameters]::new($promptBehavior)
+
+    $accessToken = $authenticationContext.AcquireTokenAsync($resourceUrl, $clientId, $redirectUrl, $platformParameters).Result.AccessToken
     return $accessToken
 }
 
@@ -115,7 +115,7 @@ switch ($Location) {
     
     "us" {
         $resourceUrl = "https://graph.windows.net"
-        $authString = "https://login.microsoftonline.us/" + $TenantId   
+        $authString = "https://login.microsoftonline.us/" + $TenantId
     }
 
     default {

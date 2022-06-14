@@ -104,12 +104,12 @@ else
 {
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals", [string]::Format('&$filter=appId eq ''{0}''', $WebApplicationId))
     $servicePrincipalId = (Invoke-RestMethod $uri -Headers $headers -ContentType "application/json").value.objectId
-    AssertNotNull $servicePrincipalId 'Service principal of web application is not found'
+    assert-notNull $servicePrincipalId 'Service principal of web application is not found'
 }
 
 $uri = [string]::Format($graphAPIFormat, "applications", [string]::Format('&$filter=appId eq ''{0}''', $WebApplicationId))
 $appRoles = (Invoke-RestMethod $uri -Headers $headers -ContentType "application/json").value.appRoles
-AssertNotNull $appRoles 'AppRoles of web application is not found'
+assert-notNull $appRoles 'AppRoles of web application is not found'
 
 if (!$UserName)
 {
@@ -141,8 +141,8 @@ $newUser = @{
 if($IsAdmin)
 {
     Write-Host 'Creating Admin User: Name = ' $UserName 'Password = ' $Password
-    $userId = (CallGraphAPI $uri $headers $newUser).objectId
-    AssertNotNull $userId 'Admin User Creation Failed'
+    $userId = (call-graphApi $uri $headers $newUser).objectId
+    assert-notNull $userId 'Admin User Creation Failed'
     Write-Host 'Admin User Created:' $userId
     $roleId = foreach ($appRole in $appRoles) 
     {
@@ -156,8 +156,8 @@ if($IsAdmin)
 #Read-Only User
 else{
     Write-Host 'Creating Read-Only User: Name = ' $UserName 'Password = ' $Password
-    $userId = (CallGraphAPI $uri $headers $newUser).objectId
-    AssertNotNull $userId 'Read-Only User Creation Failed'
+    $userId = (call-graphApi $uri $headers $newUser).objectId
+    assert-notNull $userId 'Read-Only User Creation Failed'
     Write-Host 'Read-Only User Created:' $userId
     $roleId = foreach ($appRole in $appRoles) 
     {
@@ -177,4 +177,4 @@ $appRoleAssignments = @{
     principalType = "User"
     resourceId = $servicePrincipalId
 }
-CallGraphAPI $uri $headers $appRoleAssignments | Out-Null
+call-graphApi $uri $headers $appRoleAssignments | Out-Null

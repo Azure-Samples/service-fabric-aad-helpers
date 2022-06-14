@@ -82,14 +82,14 @@ if($WebApplicationName)
 {
     $uri = [string]::Format($graphAPIFormat, "applications", [string]::Format('&$filter=displayName eq ''{0}''', $WebApplicationName))
     $apps += (Invoke-RestMethod $uri -Headers $headers).value
-    AssertNotNull $apps 'Cluster application is not found'
+    assert-notNull $apps 'Cluster application is not found'
 }
 
 if($NativeClientApplicationName)
 {
     $uri = [string]::Format($graphAPIFormat, "applications", [string]::Format('&$filter=displayName eq ''{0}''', $NativeClientApplicationName))
     $apps += (Invoke-RestMethod $uri -Headers $headers).value
-    AssertNotNull $apps 'Native Client application is not found'
+    assert-notNull $apps 'Native Client application is not found'
 }
 
 foreach($app in $apps)

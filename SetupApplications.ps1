@@ -144,7 +144,7 @@ if (!$NativeClientApplicationName) {
 $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"identifierUris:$WebApplicationUri`"")
 $eventualHeaders = $headers.clone()
 [void]$eventualHeaders.Add('ConsistencyLevel' , 'eventual')
-$webApp = (CallGraphAPI $uri -headers $eventualHeaders -body "" -method 'get').value
+$webApp = (call-graphApi $uri -headers $eventualHeaders -body "" -method 'get').value
 write-host "currentAppRegistration:$currentAppRegistration"
 
 if ($webApp) {
@@ -185,10 +185,10 @@ else {
         }
     }
     
-    $webApp = CallGraphAPI -uri $uri -headers $headers -body $webApp
+    $webApp = call-graphApi -uri $uri -headers $headers -body $webApp
 }
 
-AssertNotNull $webApp 'Web Application Creation Failed'
+assert-notNull $webApp 'Web Application Creation Failed'
 $ConfigObj.WebAppId = $webApp.appId
 Write-Host 'Web Application Created:' $webApp.appId
 
@@ -212,7 +212,7 @@ else {
         "userConsentDisplayName"  = "Access $WebApplicationName"
         "value"                   = "user_impersonation"
     }
-    CallGraphAPI -uri $patchApplicationUri -method "Patch" -headers $headers -body @{
+    call-graphApi -uri $patchApplicationUri -method "Patch" -headers $headers -body @{
         "oauth2PermissionScopes" = $webApp.api.oauth2PermissionScopes
     }
 }
@@ -225,7 +225,7 @@ $servicePrincipal = @{
     displayName               = $webApp.displayName
     appRoleAssignmentRequired = "true"
 }
-$servicePrincipal = CallGraphAPI $uri $headers $servicePrincipal
+$servicePrincipal = call-graphApi $uri $headers $servicePrincipal
 $ConfigObj.ServicePrincipalId = $servicePrincipal.objectId
 
 #Create Native Client Application
@@ -244,8 +244,8 @@ $nativeApp = @{
     replyUrls              = @("urn:ietf:wg:oauth:2.0:oob")
     requiredResourceAccess = $nativeAppResourceAccess
 }
-$nativeApp = CallGraphAPI $uri $headers $nativeApp
-AssertNotNull $nativeApp 'Native Client Application Creation Failed'
+$nativeApp = call-graphApi $uri $headers $nativeApp
+assert-notNull $nativeApp 'Native Client Application Creation Failed'
 Write-Host 'Native Client Application Created:' $nativeApp.appId
 $ConfigObj.NativeClientAppId = $nativeApp.appId
 
@@ -256,7 +256,7 @@ $servicePrincipal = @{
     appId          = $nativeApp.appId
     displayName    = $nativeApp.displayName
 }
-$servicePrincipal = CallGraphAPI $uri $headers $servicePrincipal
+$servicePrincipal = call-graphApi $uri $headers $servicePrincipal
 
 #OAuth2PermissionGrant
 
@@ -273,7 +273,7 @@ $oauth2PermissionGrants = @{
     startTime   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
     expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
 }
-CallGraphAPI $uri $headers $oauth2PermissionGrants | Out-Null
+call-graphApi $uri $headers $oauth2PermissionGrants | Out-Null
 $oauth2PermissionGrants = @{
     clientId    = $servicePrincipal.objectId
     consentType = "AllPrincipals"
@@ -282,7 +282,7 @@ $oauth2PermissionGrants = @{
     startTime   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
     expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
 }
-CallGraphAPI $uri $headers $oauth2PermissionGrants | Out-Null
+call-graphApi $uri $headers $oauth2PermissionGrants | Out-Null
 
 $ConfigObj
 
