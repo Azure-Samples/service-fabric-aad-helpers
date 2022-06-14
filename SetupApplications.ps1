@@ -44,7 +44,7 @@ Setup tenant with default settings generated from a friendly cluster name.
 Setup tenant with explicit application settings.
 
 .EXAMPLE
-. $ConfigObj = Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080'
+. $configObj = Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080'
 
 Setup and save the setup result into a temporary variable to pass into SetupUser.ps1
 #>
@@ -90,70 +90,139 @@ Param
     $AddResourceAccess
 )
 
-Write-Host 'TenantId = ' $TenantId
-
 . "$PSScriptRoot\Common.ps1"
-
 #$graphAPIFormat = $resourceUrl + "/" + $TenantId + "/{0}?api-version=1.5"
 $graphAPIFormat = $resourceUrl + "/v1.0/" + $TenantId + "/{0}"
-
 $global:ConfigObj = @{}
-$ConfigObj.ClusterName = $clusterName
-$ConfigObj.TenantId = $TenantId
 
-$appRole = @(@{
-    allowedMemberTypes = @("User")
-    description        = "ReadOnly roles have limited query access"
-    displayName        = "ReadOnly"
-    id                 = [guid]::NewGuid()
-    isEnabled          = "true"
-    value              = "User"
-},@{
-    allowedMemberTypes = @("User")
-    description        = "Admins can manage roles and perform all task actions"
-    displayName        = "Admin"
-    id                 = [guid]::NewGuid()
-    isEnabled          = "true"
-    value              = "Admin"
-})
+function main () {
+    Write-Host 'TenantId = ' $TenantId
+    $configObj.ClusterName = $clusterName
+    $configObj.TenantId = $TenantId
+    $webApp = $null
+    $eventualHeaders = $headers.clone()
+    [void]$eventualHeaders.Add('ConsistencyLevel' , 'eventual')
 
-$requiredResourceAccess = @(@{
-        resourceAppId  = "00000002-0000-0000-c000-000000000000"
-        resourceAccess = @(@{
-                id   = "311a71cc-e848-46a1-bdf8-97ff7156d8e6"
-                type = "Scope"
-            })
-    })
 
-if (!$WebApplicationName) {
-    $WebApplicationName = "ServiceFabricCluster"
+    if (!$WebApplicationName) {
+        $WebApplicationName = "ServiceFabricCluster"
+    }
+    
+    if (!$WebApplicationUri) {
+        $WebApplicationUri = "https://ServiceFabricCluster"
+    }
+    
+    if (!$NativeClientApplicationName) {
+        $NativeClientApplicationName = "ServiceFabricClusterNativeClient"
+    }
+
+    $requiredResourceAccess = @(@{
+            resourceAppId  = "00000002-0000-0000-c000-000000000000"
+            resourceAccess = @(@{
+                    id   = "311a71cc-e848-46a1-bdf8-97ff7156d8e6"
+                    type = "Scope"
+                })
+        })
+
+    # check / add app registration
+    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri -eventualHeaders $eventualHeaders
+    if (!webApp) {
+        $webApp = add-appRegistration -WebApplicationUri $WebApplicationUri `
+            -WebApplicationReplyUrl $WebApplicationReplyUrl `
+            -requiredResourceAccess $requiredResourceAccess
+    }
+
+    assert-notNull $webApp 'Web Application Creation Failed'
+    $configObj.WebAppId = $webApp.appId
+    Write-Host "Web Application Created: $($webApp.appId)"
+
+    # check / add oauth user_impersonation permissions
+    if (!get-OauthPermissions -webApp $webApp) {
+        $result = add-OauthPermissions -webApp $webApp
+    }
+    assert-notNull $result 'Web Application Oauth permissions Failed'
+
+    # check / add servicePrincipal
+    $servicePrincipal = get-servicePrincipal -webApp $webApp -eventualHeaders $eventualHeaders
+    if (!$servicePrincipal) {
+        $servicePrincipal = add-servicePrincipal -webApp $webApp
+    }
+    assert-notNull $servicePrincipal 'service principal configuration failed'
+    Write-Host 'Service Principal Created:' $servicePrincipal.appId
+    $configObj.ServicePrincipalId = $servicePrincipal.objectId
+
+    # check / add native app
+    $nativeApp = get-nativeClient -webApp $webApp -WebApplicationUri $WebApplicationUri -eventualHeaders $eventualHeaders
+    if (!$nativeApp) {
+        $nativeApp = add-nativeClient
+    }
+    assert-notNull $nativeApp 'Native Client Application Creation Failed'
+    Write-Host 'Native Client Application Created:' $nativeApp.appId
+    $configObj.NativeClientAppId = $nativeApp.appId
+
+    # check / add native app service principal
+    $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp -eventualHeaders $eventualHeaders
+    if (!$servicePrincipalNa) {
+        $servicePrincipalNa = add-servicePrincipal -webApp $nativeApp
+    }
+    assert-notNull $servicePrincipalNa 'native app service principal configuration failed'
+
+    # check / add native app service principal
+    $servicePrincipalAAD = get-servicePrincipal -servicePrincipalNa $nativeApp -eventualHeaders $eventualHeaders
+    if (!$servicePrincipalAAD) {
+        $servicePrincipalAAD = add-servicePrincipalAAD -servicePrincipalNa $nativeApp -servicePrincipal $configObj.ServicePrincipalId
+    }
+    assert-notNull $servicePrincipalAAD 'aad app service principal configuration failed'
+    Write-Host 'AADP Application Created:' $servicePrincipalAAD.appId
+    write-host "configobj: $($configObj|convertto-json)"
+
+    #ARM template
+    Write-Host
+    Write-Host '-----ARM template-----'
+    Write-Host '"azureActiveDirectory": {'
+    Write-Host "  `"tenantId`":`"$($configObj.TenantId)`","
+    Write-Host "  `"clusterApplication`":`"$($configObj.WebAppId)`","
+    Write-Host "  `"clientApplication`":`"$($configObj.NativeClientAppId)`""
+    Write-Host "},"
 }
 
-if (!$WebApplicationUri) {
-    $WebApplicationUri = "https://ServiceFabricCluster"
+function get-appRegistration($WebApplicationUri, $eventualHeaders) {
+    # check for existing app by identifieruri
+    $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"identifierUris:$WebApplicationUri`"")
+   
+    $webApp = (call-graphApi $uri -headers $eventualHeaders -body "" -method 'get').value
+    write-host "currentAppRegistration:$webApp"
+
+    if ($webApp) {
+        write-host "app registration $($webApp.appId) with $WebApplicationUri already exists." -foregroundcolor yellow
+        write-host "currentAppRegistration:$($webApp|convertto-json -depth 99)"
+        return $webApp
+    }
+
+    return $null
 }
 
-if (!$NativeClientApplicationName) {
-    $NativeClientApplicationName = "ServiceFabricClusterNativeClient"
-}
-
-# check for existing app by identifieruri
-$uri = [string]::Format($graphAPIFormat, "applications?`$search=`"identifierUris:$WebApplicationUri`"")
-$eventualHeaders = $headers.clone()
-[void]$eventualHeaders.Add('ConsistencyLevel' , 'eventual')
-$webApp = (call-graphApi $uri -headers $eventualHeaders -body "" -method 'get').value
-write-host "currentAppRegistration:$currentAppRegistration"
-
-if ($webApp) {
-    write-host "app registration $($webApp.appId) with $WebApplicationUri already exists." -foregroundcolor yellow
-    write-host "currentAppRegistration:$($webApp|convertto-json -depth 99)"
-}
-else {
+function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requiredResourceAccess) {
     #Create Web Application
-    write-host "app registration with $WebApplicationUri does not exist." -foregroundcolor yellow
-    $uri = [string]::Format($graphAPIFormat, "applications")
-
+    write-host "creating app registration with $WebApplicationUri." -foregroundcolor yellow
     $webApp = @{}
+    $appRole = @(@{
+            allowedMemberTypes = @('User')
+            description        = 'ReadOnly roles have limited query access'
+            displayName        = 'ReadOnly'
+            id                 = [guid]::NewGuid()
+            isEnabled          = $true
+            value              = 'User'
+        }, @{
+            allowedMemberTypes = @('User')
+            description        = 'Admins can manage roles and perform all task actions'
+            displayName        = 'Admin'
+            id                 = [guid]::NewGuid()
+            isEnabled          = $true
+            value              = 'Admin'
+        })
+
+    $uri = [string]::Format($graphAPIFormat, 'applications')
     $webAppResource = @{
         homePageUrl           = $WebApplicationReplyUrl
         redirectUris          = @($WebApplicationReplyUrl)
@@ -181,22 +250,25 @@ else {
             web                = $webAppResource
         }
     }
-    
+
     $webApp = call-graphApi -uri $uri -headers $headers -body $webApp
+    return $webApp
 }
 
-assert-notNull $webApp 'Web Application Creation Failed'
-$ConfigObj.WebAppId = $webApp.appId
-Write-Host 'Web Application Created:' $webApp.appId
+function get-OauthPermissions($webApp) {
+    # Check for an existing delegated permission with value "user_impersonation". Normally this is created by default,
+    # but if it isn't, we need to update the Application object with a new one.
+    $user_impersonation_scope = $webApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq "user_impersonation" }
+    if ($user_impersonation_scope) {
+        write-host "user_impersonation scope already exists."
+        return $true
+    }
 
-# Check for an existing delegated permission with value "user_impersonation". Normally this is created by default,
-# but if it isn't, we need to update the Application object with a new one.
-$user_impersonation_scope = $webApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq "user_impersonation" }
-if ($user_impersonation_scope) {
-    write-host "user_impersonation scope already exists."
+    return $false
 }
-else {
-    write-host "user_impersonation scope does not exist. creating"
+
+function add-OauthPermissions($webApp, $WebApplicationName) {
+    write-host "adding user_impersonation scope"
     $patchApplicationUri = $graphAPIFormat -f ("applications/{0}" -f $webApp.Id)
     $webApp.api.oauth2PermissionScopes = @($webApp.api.oauth2PermissionScopes)
     $webApp.api.oauth2PermissionScopes += @{
@@ -210,85 +282,113 @@ else {
         value                   = "user_impersonation"
     }
 
-    call-graphApi -uri $patchApplicationUri -method "Patch" -headers $headers -body @{
+    $result = call-graphApi -uri $patchApplicationUri -method "Patch" -headers $headers -body @{
         "oauth2PermissionScopes" = $webApp.api.oauth2PermissionScopes
     }
+
+    return $result
 }
 
-#Service Principal
-$uri = [string]::Format($graphAPIFormat, "servicePrincipals")
-$servicePrincipal = @{
-    accountEnabled            = $true
-    appId                     = $webApp.appId
-    displayName               = $webApp.displayName
-    appRoleAssignmentRequired = $true
+function get-servicePrincipal($webApp, $eventualHeaders) {
+    # check for existing app by identifieruri
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals?`$search=`"appId:$($webApp.appId)`"")
+   
+    $servicePrincipal = (call-graphApi $uri -headers $eventualHeaders -body "" -method 'get').value
+    write-host "servicePrincipal:$servicePrincipal"
+
+    if ($servicePrincipal) {
+        write-host "service principal $($servicePrincipal.appId) already exists." -foregroundcolor yellow
+        write-host "current service principal:$($servicePrincipal|convertto-json -depth 99)"
+        return $servicePrincipal
+    }
+
+    return $null
 }
-$servicePrincipal = call-graphApi $uri $headers $servicePrincipal
-$ConfigObj.ServicePrincipalId = $servicePrincipal.objectId
 
-#Create Native Client Application
-$uri = [string]::Format($graphAPIFormat, "applications")
-$nativeAppResourceAccess = $requiredResourceAccess +=
-@{
-    resourceAppId  = $webApp.appId
-    resourceAccess = @(@{
-            id   = $webApp.oauth2Permissions[0].id
-            type = "Scope"
-        })
+function add-servicePrincipal($webApp) {
+    #Service Principal
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals")
+    $servicePrincipal = @{
+        accountEnabled            = $true
+        appId                     = $webApp.appId
+        displayName               = $webApp.displayName
+        appRoleAssignmentRequired = $true
+    }
+
+    $servicePrincipal = call-graphApi -uri $uri -headers $headers -body $servicePrincipal
+    return $servicePrincipal
 }
-$nativeApp = @{
-    publicClient           = $true
-    displayName            = $NativeClientApplicationName
-    replyUrls              = @("urn:ietf:wg:oauth:2.0:oob")
-    requiredResourceAccess = $nativeAppResourceAccess
+
+function get-nativeClient($webApp, $eventualHeaders) {
+    # check for existing native clinet
+    $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"appId:$($webApp.appId)`"")
+   
+    $nativeClient = (call-graphApi $uri -headers $eventualHeaders -body "" -method 'get').value
+    write-host "nativeClient:$nativeClient"
+
+    if ($nativeClient) {
+        write-host "native client $($nativeClient.appId) with $WebApplicationUri already exists." -foregroundcolor yellow
+        write-host "current service principal:$($nativeClient|convertto-json -depth 99)"
+        return $nativeClient
+    }
+
+    return $null
 }
-$nativeApp = call-graphApi $uri $headers $nativeApp
-assert-notNull $nativeApp 'Native Client Application Creation Failed'
-Write-Host 'Native Client Application Created:' $nativeApp.appId
-$ConfigObj.NativeClientAppId = $nativeApp.appId
 
-#Service Principal
-$uri = [string]::Format($graphAPIFormat, "servicePrincipals")
-$servicePrincipal = @{
-    accountEnabled = "true"
-    appId          = $nativeApp.appId
-    displayName    = $nativeApp.displayName
+function add-nativeClient($webApp, $requiredResourceAccess) {
+    #Create Native Client Application
+    $uri = [string]::Format($graphAPIFormat, "applications")
+    $nativeAppResourceAccess = $requiredResourceAccess +=
+    @{
+        resourceAppId  = $webApp.appId
+        resourceAccess = @(@{
+                id   = $webApp.oauth2Permissions[0].id
+                type = 'Scope'
+            })
+    }
+    $nativeAppResource = @{
+        publicClient           = $true
+        displayName            = $NativeClientApplicationName
+        replyUrls              = @("urn:ietf:wg:oauth:2.0:oob")
+        requiredResourceAccess = $nativeAppResourceAccess
+    }
+
+    $nativeApp = call-graphApi -uri $uri -headers $headers -body $nativeAppResource
+    return $nativeApp
 }
-$servicePrincipal = call-graphApi $uri $headers $servicePrincipal
 
-#OAuth2PermissionGrant
+function get-servicePrincipalAAD() {
 
-#AAD service principal
-$uri = [string]::Format($graphAPIFormat, "servicePrincipals") + '&$filter=appId eq ''00000002-0000-0000-c000-000000000000'''
-$AADServicePrincipalId = (Invoke-RestMethod $uri -Headers $headers).value.objectId
-
-$uri = [string]::Format($graphAPIFormat, "oauth2PermissionGrants")
-$oauth2PermissionGrants = @{
-    clientId    = $servicePrincipal.objectId
-    consentType = "AllPrincipals"
-    resourceId  = $AADServicePrincipalId
-    scope       = "User.Read"
-    startTime   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
-    expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
 }
-call-graphApi $uri $headers $oauth2PermissionGrants | Out-Null
-$oauth2PermissionGrants = @{
-    clientId    = $servicePrincipal.objectId
-    consentType = "AllPrincipals"
-    resourceId  = $ConfigObj.ServicePrincipalId
-    scope       = "user_impersonation"
-    startTime   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
-    expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
+
+function add-servicePrincipalAAD($servicePrincipalNa, $servicePrincipal ) {
+    #OAuth2PermissionGrant
+    #AAD service principal
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + '&$filter=appId eq ''00000002-0000-0000-c000-000000000000'''
+    $AADServicePrincipalId = (Invoke-RestMethod -uri $uri -Headers $headers).value.objectId
+    $uri = [string]::Format($graphAPIFormat, "oauth2PermissionGrants")
+    
+    $oauth2PermissionGrants = @{
+        clientId    = $servicePrincipalNa.objectId
+        consentType = "AllPrincipals"
+        resourceId  = $AADServicePrincipalId
+        scope       = "User.Read"
+        startTime   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
+        expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
+    }
+
+    call-graphApi -uri $uri -headers $headers -body $oauth2PermissionGrants | Out-Null
+    
+    $oauth2PermissionGrants = @{
+        clientId    = $servicePrincipalNa.objectId
+        consentType = "AllPrincipals"
+        resourceId  = $servicePrincipal #$configObj.ServicePrincipalId
+        scope       = "user_impersonation"
+        startTime   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
+        expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
+    }
+
+    call-graphApi -uri $uri -headers $headers -body $oauth2PermissionGrants | Out-Null
 }
-call-graphApi $uri $headers $oauth2PermissionGrants | Out-Null
 
-$ConfigObj
-
-#ARM template
-Write-Host
-Write-Host '-----ARM template-----'
-Write-Host '"azureActiveDirectory": {'
-Write-Host "  `"tenantId`":`"$($ConfigObj.TenantId)`","
-Write-Host "  `"clusterApplication`":`"$($ConfigObj.WebAppId)`","
-Write-Host "  `"clientApplication`":`"$($ConfigObj.NativeClientAppId)`""
-Write-Host "},"
+main
