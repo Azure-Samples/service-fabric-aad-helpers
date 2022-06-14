@@ -368,9 +368,10 @@ function add-servicePrincipalAAD($servicePrincipalNa, $servicePrincipal ) {
     #OAuth2PermissionGrant
     #AAD service principal
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + '&$filter=appId eq ''00000002-0000-0000-c000-000000000000'''
-    $AADServicePrincipalId = (Invoke-RestMethod -uri $uri -Headers $headers).value.objectId
+    $AADServicePrincipalId = (call-graphApi -uri $uri -Headers $headers -method 'get').value.objectId
+    assert-notNull $AADServicePrincipalId 'aad app service principal configuration failed'
+
     $uri = [string]::Format($graphAPIFormat, "oauth2PermissionGrants")
-    
     $oauth2PermissionGrants = @{
         clientId    = $servicePrincipalNa.objectId
         consentType = "AllPrincipals"
@@ -380,8 +381,9 @@ function add-servicePrincipalAAD($servicePrincipalNa, $servicePrincipal ) {
         expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
     }
 
-    call-graphApi -uri $uri -headers $headers -body $oauth2PermissionGrants | Out-Null
-    
+    $result = call-graphApi -uri $uri -headers $headers -body $oauth2PermissionGrants
+    assert-notNull $result 'aad app service principal oauth permissions user.read configuration failed'
+
     $oauth2PermissionGrants = @{
         clientId    = $servicePrincipalNa.objectId
         consentType = "AllPrincipals"
@@ -391,7 +393,8 @@ function add-servicePrincipalAAD($servicePrincipalNa, $servicePrincipal ) {
         expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
     }
 
-    call-graphApi -uri $uri -headers $headers -body $oauth2PermissionGrants | Out-Null
+    $result = call-graphApi -uri $uri -headers $headers -body $oauth2PermissionGrants
+    assert-notNull $result 'aad app service principal oauth permissions user_impersonate configuration failed'
 }
 
 main
