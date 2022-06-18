@@ -179,14 +179,13 @@ function main () {
     Write-Host "AADP Application Created: $($servicePrincipalAAD.appId)"  -ForegroundColor Green
     write-host "configobj: $($configObj|convertto-json)"
 
-    #ARM template
-    Write-Host
-    Write-Host '-----ARM template-----'
-    Write-Host '"azureActiveDirectory": {'
-    Write-Host "  `"tenantId`":`"$($configObj.TenantId)`","
-    Write-Host "  `"clusterApplication`":`"$($configObj.WebAppId)`","
-    Write-Host "  `"clientApplication`":`"$($configObj.NativeClientAppId)`""
-    Write-Host "},"
+    #ARM template AAD resource
+    write-host "-----ARM template-----"
+    write-host "`"azureActiveDirectory`": $(@{
+        tenantId           = $configObj.tenantId
+        clusterApplication = $configObj.WebAppId
+        clientApplication  = $configObj.NativeClientAppId
+    } | ConvertTo-Json)," -ForegroundColor Cyan
 }
 
 function get-appRegistration($WebApplicationUri, $eventualHeaders) {
