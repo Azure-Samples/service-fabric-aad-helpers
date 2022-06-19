@@ -186,6 +186,8 @@ function main () {
         clusterApplication = $configObj.WebAppId
         clientApplication  = $configObj.NativeClientAppId
     } | ConvertTo-Json)," -ForegroundColor Cyan
+
+    return $configObj
 }
 
 function get-appRegistration($WebApplicationUri, $eventualHeaders) {
