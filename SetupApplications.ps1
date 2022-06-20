@@ -87,7 +87,12 @@ Param
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
     [Switch]
-    $AddResourceAccess
+    $AddResourceAccess,
+    
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [Switch]$force
+
 )
 
 . "$PSScriptRoot\Common.ps1"
@@ -139,7 +144,7 @@ function main () {
     # check / add oauth user_impersonation permissions
     $oauthPermissions = get-OauthPermissions -webApp $webApp
     if (!$oauthPermissions) {
-        $oauthPermissions = add-OauthPermissions -webApp $webApp
+        $oauthPermissions = add-OauthPermissions -webApp $webApp -WebApplicationName $WebApplicationName
     }
     assert-notNull $oauthPermissions 'Web Application Oauth permissions Failed'
     Write-Host "Web Application Oauth permissions created: $($oauthPermissions|convertto-json)"  -ForegroundColor Green
@@ -151,7 +156,7 @@ function main () {
     }
     assert-notNull $servicePrincipal 'service principal configuration failed'
     Write-Host "Service Principal Created: $($servicePrincipal.appId)" -ForegroundColor Green
-    $configObj.ServicePrincipalId = $servicePrincipal.objectId
+    $configObj.ServicePrincipalId = $servicePrincipal.Id
 
     # check / add native app
     $nativeApp = get-nativeClient -webApp $webApp -WebApplicationUri $WebApplicationUri -eventualHeaders $eventualHeaders
@@ -165,18 +170,20 @@ function main () {
     # check / add native app service principal
     $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp -eventualHeaders $eventualHeaders
     if (!$servicePrincipalNa) {
+        write-host "todo: $($nativeApp|convertto-json -depth 99)" -ForegroundColor Magenta
         $servicePrincipalNa = add-servicePrincipal -webApp $nativeApp
     }
     assert-notNull $servicePrincipalNa 'native app service principal configuration failed'
     Write-Host "Native app service principal created: $($servicePrincipalNa.appId)" -ForegroundColor Green
 
-    # check / add native app service principal
+    # check / add native app service principal AAD
     $servicePrincipalAAD = get-servicePrincipalAAD -servicePrincipalNa $servicePrincipalNa -eventualHeaders $eventualHeaders
     if (!$servicePrincipalAAD) {
-        $servicePrincipalAAD = add-servicePrincipalAAD -servicePrincipalNa $servicePrincipalNa -servicePrincipal $configObj.ServicePrincipalId
+        write-host "todo: $($webApp|convertto-json -depth 99)" -ForegroundColor Magenta
+        $servicePrincipalAAD = add-servicePrincipalAAD -servicePrincipalNa $servicePrincipalNa -servicePrincipal $servicePrincipal
     }
     assert-notNull $servicePrincipalAAD 'aad app service principal configuration failed'
-    Write-Host "AADP Application Created: $($servicePrincipalAAD.appId)"  -ForegroundColor Green
+    Write-Host "AAD Application Created: $($servicePrincipalAAD.appId)"  -ForegroundColor Green
     write-host "configobj: $($configObj|convertto-json)"
 
     #ARM template AAD resource
@@ -277,7 +284,7 @@ function add-OauthPermissions($webApp, $WebApplicationName) {
     $webApp.api.oauth2PermissionScopes = @($webApp.api.oauth2PermissionScopes)
     $webApp.api.oauth2PermissionScopes += @{
         id                      = [guid]::NewGuid()
-        isEnabled               = $true
+        isEnabled               = $false
         type                    = "User"
         adminConsentDescription = "Allow the application to access $WebApplicationName on behalf of the signed-in user."
         adminConsentDisplayName = "Access $WebApplicationName"
@@ -287,7 +294,9 @@ function add-OauthPermissions($webApp, $WebApplicationName) {
     }
 
     $result = call-graphApi -uri $patchApplicationUri -method "Patch" -headers $headers -body @{
-        "oauth2PermissionScopes" = $webApp.api.oauth2PermissionScopes
+        'api' = @{
+            "oauth2PermissionScopes" = $webApp.api.oauth2PermissionScopes
+        }
     }
 
     return $result
@@ -313,7 +322,7 @@ function add-servicePrincipal($webApp) {
     #Service Principal
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals")
     $servicePrincipal = @{
-        accountEnabled            = $true
+        accountEnabled            = $false
         appId                     = $webApp.appId
         displayName               = $webApp.displayName
         appRoleAssignmentRequired = $true
@@ -368,13 +377,13 @@ function get-servicePrincipalAAD() {
 function add-servicePrincipalAAD($servicePrincipalNa, $servicePrincipal ) {
     #OAuth2PermissionGrant
     #AAD service principal
-    $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + '&$filter=appId eq ''00000002-0000-0000-c000-000000000000'''
-    $AADServicePrincipalId = (call-graphApi -uri $uri -Headers $headers -method 'get').value.objectId
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + '?$filter=appId eq ''00000002-0000-0000-c000-000000000000'''
+    $AADServicePrincipalId = (call-graphApi -uri $uri -Headers $headers -method 'get').value.Id
     assert-notNull $AADServicePrincipalId 'aad app service principal configuration failed'
 
     $uri = [string]::Format($graphAPIFormat, "oauth2PermissionGrants")
     $oauth2PermissionGrants = @{
-        clientId    = $servicePrincipalNa.objectId
+        clientId    = $servicePrincipalNa.Id
         consentType = "AllPrincipals"
         resourceId  = $AADServicePrincipalId
         scope       = "User.Read"
@@ -386,9 +395,9 @@ function add-servicePrincipalAAD($servicePrincipalNa, $servicePrincipal ) {
     assert-notNull $result 'aad app service principal oauth permissions user.read configuration failed'
 
     $oauth2PermissionGrants = @{
-        clientId    = $servicePrincipalNa.objectId
+        clientId    = $servicePrincipalNa.Id
         consentType = "AllPrincipals"
-        resourceId  = $servicePrincipal #$configObj.ServicePrincipalId
+        resourceId  = $servicePrincipal.Id #$configObj.ServicePrincipalId
         scope       = "user_impersonation"
         startTime   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
         expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
