@@ -170,20 +170,18 @@ function main () {
     # check / add native app service principal
     $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp -eventualHeaders $eventualHeaders
     if (!$servicePrincipalNa) {
-        write-host "todo: $($nativeApp|convertto-json -depth 99)" -ForegroundColor Magenta
         $servicePrincipalNa = add-servicePrincipal -webApp $nativeApp
     }
     assert-notNull $servicePrincipalNa 'native app service principal configuration failed'
     Write-Host "Native app service principal created: $($servicePrincipalNa.appId)" -ForegroundColor Green
 
     # check / add native app service principal AAD
-    $servicePrincipalAAD = get-servicePrincipalAAD -servicePrincipalNa $servicePrincipalNa -eventualHeaders $eventualHeaders
-    if (!$servicePrincipalAAD) {
-        write-host "todo: $($webApp|convertto-json -depth 99)" -ForegroundColor Magenta
-        $servicePrincipalAAD = add-servicePrincipalAAD -servicePrincipalNa $servicePrincipalNa -servicePrincipal $servicePrincipal
-    }
+    $servicePrincipalAAD = add-servicePrincipalGrants -servicePrincipalNa $servicePrincipalNa `
+        -servicePrincipal $servicePrincipal `
+        -eventualHeaders $eventualHeaders
+
     assert-notNull $servicePrincipalAAD 'aad app service principal configuration failed'
-    Write-Host "AAD Application Created: $($servicePrincipalAAD.appId)"  -ForegroundColor Green
+    Write-Host "AAD Application Configured: $($servicePrincipalAAD)"  -ForegroundColor Green
     write-host "configobj: $($configObj|convertto-json)"
 
     #ARM template AAD resource
@@ -371,40 +369,53 @@ function add-nativeClient($webApp, $requiredResourceAccess) {
 }
 
 function get-servicePrincipalAAD() {
-    return $null
+    # get 'Windows Azure Active Directory' app registration by well-known appId
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + '?$filter=appId eq ''00000002-0000-0000-c000-000000000000'''
+    $global:AADServicePrincipal = call-graphApi -uri $uri -Headers $headers -method 'get'
+    write-verbose "aad service princiapal:$($AADServicePrincipal | convertto-json -depth 2)"
+    return $AADServicePrincipal
 }
 
-function add-servicePrincipalAAD($servicePrincipalNa, $servicePrincipal ) {
+function get-oauth2PermissionGrants($clientId) {
+    # get 'Windows Azure Active Directory' app registration by well-known appId
+    $uri = [string]::Format($graphAPIFormat, "oauth2PermissionGrants") + "?`$filter=clientId eq '$clientId'"
+    $grants = call-graphApi -uri $uri -Headers $headers -method 'get'
+    write-verbose "grants:$($grants | convertto-json -depth 2)"
+    return $grants.value
+}
+
+
+function add-servicePrincipalGrants($servicePrincipalNa, $servicePrincipal) {
     #OAuth2PermissionGrant
     #AAD service principal
-    $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + '?$filter=appId eq ''00000002-0000-0000-c000-000000000000'''
-    $AADServicePrincipalId = (call-graphApi -uri $uri -Headers $headers -method 'get').value.Id
+    $AADServicePrincipalId = (get-servicePrincipalAAD).value.Id
     assert-notNull $AADServicePrincipalId 'aad app service principal configuration failed'
+    $global:currentGrants = get-oauth2PermissionGrants($servicePrincipalNa.Id)
 
+    $scope = "User.Read"
+    if (!($currentGrants.scope.Contains($scope))) {
+        add-servicePrincipalGrantScope -clientId $servicePrincipalNa.Id -resourceId =$AADServicePrincipalId -scope $scope
+    }
+
+    $scope = "user_impersonation"
+    if (!($currentGrants.scope.Contains($scope))) {
+        add-servicePrincipalGrantScope -clientId $servicePrincipalNa.Id -resourceId =$servicePrincipal.Id -scope $scope
+    }
+}
+
+function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
     $uri = [string]::Format($graphAPIFormat, "oauth2PermissionGrants")
     $oauth2PermissionGrants = @{
-        clientId    = $servicePrincipalNa.Id
+        clientId    = $clientId
         consentType = "AllPrincipals"
-        resourceId  = $AADServicePrincipalId
-        scope       = "User.Read"
+        resourceId  = $resourceId #$configObj.ServicePrincipalId
+        scope       = $scope
         startTime   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
         expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
     }
 
     $result = call-graphApi -uri $uri -headers $headers -body $oauth2PermissionGrants
-    assert-notNull $result 'aad app service principal oauth permissions user.read configuration failed'
-
-    $oauth2PermissionGrants = @{
-        clientId    = $servicePrincipalNa.Id
-        consentType = "AllPrincipals"
-        resourceId  = $servicePrincipal.Id #$configObj.ServicePrincipalId
-        scope       = "user_impersonation"
-        startTime   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
-        expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
-    }
-
-    $result = call-graphApi -uri $uri -headers $headers -body $oauth2PermissionGrants
-    assert-notNull $result 'aad app service principal oauth permissions user_impersonate configuration failed'
+    assert-notNull $result "aad app service principal oauth permissions $scope configuration failed"
 }
 
 main

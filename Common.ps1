@@ -168,7 +168,7 @@ function get-restTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $sc
             write-host "logon result: $($global:logonResult | convertto-json)"
             $global:accessToken = $global:logonResult.access_token
             $global:accessTokenExpiration = ((get-date).AddSeconds($global:logonResult.expires_in))
-            return ($global:accessToken -ne $null)
+            return $global:accessToken
         }
         catch [System.Exception] {
             $errorMessage = ($_ | convertfrom-json)
