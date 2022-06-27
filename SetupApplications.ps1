@@ -142,12 +142,12 @@ function main () {
     Write-Host "Web Application Created: $($webApp.appId)"
 
     # check / add oauth user_impersonation permissions
-    $oauthPermissions = get-OauthPermissions -webApp $webApp
-    if (!$oauthPermissions) {
-        $oauthPermissions = add-OauthPermissions -webApp $webApp -WebApplicationName $WebApplicationName
+    $oauthPermissionsId = get-OauthPermissions -webApp $webApp
+    if (!$oauthPermissionsId) {
+        $oauthPermissionsId = add-OauthPermissions -webApp $webApp -WebApplicationName $WebApplicationName
     }
-    assert-notNull $oauthPermissions 'Web Application Oauth permissions Failed'
-    Write-Host "Web Application Oauth permissions created: $($oauthPermissions|convertto-json)"  -ForegroundColor Green
+    assert-notNull $oauthPermissionsId 'Web Application Oauth permissions Failed'
+    Write-Host "Web Application Oauth permissions created: $($oauthPermissionsId|convertto-json)"  -ForegroundColor Green
 
     # check / add servicePrincipal
     $servicePrincipal = get-servicePrincipal -webApp $webApp -eventualHeaders $eventualHeaders
@@ -161,7 +161,7 @@ function main () {
     # check / add native app
     $nativeApp = get-nativeClient -webApp $webApp -WebApplicationUri $WebApplicationUri -eventualHeaders $eventualHeaders
     if (!$nativeApp) {
-        $nativeApp = add-nativeClient -webApp $webApp -requiredResourceAccess $requiredResourceAccess
+        $nativeApp = add-nativeClient -webApp $webApp -requiredResourceAccess $requiredResourceAccess -oauthPermissionsId $oauthPermissionsId
     }
     assert-notNull $nativeApp 'Native Client Application Creation Failed'
     Write-Host "Native Client Application Created: $($nativeApp.appId)"  -ForegroundColor Green
@@ -269,19 +269,20 @@ function get-OauthPermissions($webApp) {
     # but if it isn't, we need to update the Application object with a new one.
     $user_impersonation_scope = $webApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq "user_impersonation" }
     if ($user_impersonation_scope) {
-        write-host "user_impersonation scope already exists." -ForegroundColor yellow
-        return $true
+        write-host "user_impersonation scope already exists. $($user_impersonation_scope.id)" -ForegroundColor yellow
+        return $user_impersonation_scope.id
     }
 
-    return $false
+    return $null
 }
 
 function add-OauthPermissions($webApp, $WebApplicationName) {
     write-host "adding user_impersonation scope"
     $patchApplicationUri = $graphAPIFormat -f ("applications/{0}" -f $webApp.Id)
     $webApp.api.oauth2PermissionScopes = @($webApp.api.oauth2PermissionScopes)
+    $userImpersonationScopeId = [guid]::NewGuid()
     $webApp.api.oauth2PermissionScopes += @{
-        id                      = [guid]::NewGuid()
+        id                      = $userImpersonationScopeId
         isEnabled               = $false
         type                    = "User"
         adminConsentDescription = "Allow the application to access $WebApplicationName on behalf of the signed-in user."
@@ -297,7 +298,11 @@ function add-OauthPermissions($webApp, $WebApplicationName) {
         }
     }
 
-    return $result
+    if ($result){
+        return $userImpersonationScopeId
+    }
+
+    return $null
 }
 
 function get-servicePrincipal($webApp, $eventualHeaders) {
@@ -332,7 +337,8 @@ function add-servicePrincipal($webApp) {
 
 function get-nativeClient($webApp, $eventualHeaders) {
     # check for existing native clinet
-    $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"appId:$($webApp.appId)`"")
+    #$uri = [string]::Format($graphAPIFormat, "applications?`$search=`"appId:$($webApp.appId)`"")
+    $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"displayName:$NativeClientApplicationName`"")
    
     $nativeClient = (call-graphApi $uri -headers $eventualHeaders -body "" -method 'get').value
     write-host "nativeClient:$nativeClient"
@@ -346,21 +352,24 @@ function get-nativeClient($webApp, $eventualHeaders) {
     return $null
 }
 
-function add-nativeClient($webApp, $requiredResourceAccess) {
+function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId) {
     #Create Native Client Application
+    write-host "todo: webapp: $($webApp | convertto-json -depth 2)`r`n required resource access: $($requiredResourceAccess | convertto-json -depth 2)"
     $uri = [string]::Format($graphAPIFormat, "applications")
-    $nativeAppResourceAccess = $requiredResourceAccess +=
-    @{
+    $nativeAppResourceAccess = @($requiredResourceAccess.Clone())
+
+    $nativeAppResourceAccess += @{
         resourceAppId  = $webApp.appId
         resourceAccess = @(@{
-                id   = $webApp.oauth2Permissions[0].id
+                id   = $oauthPermissionsId #$webApp.oauth2PermissionScopes[0].id
                 type = 'Scope'
             })
     }
+
     $nativeAppResource = @{
-        publicClient           = $true
+        publicClient           = @{ redirectUris = @("urn:ietf:wg:oauth:2.0:oob")}#$true
         displayName            = $NativeClientApplicationName
-        replyUrls              = @("urn:ietf:wg:oauth:2.0:oob")
+        #replyUrls              = @("urn:ietf:wg:oauth:2.0:oob")
         requiredResourceAccess = $nativeAppResourceAccess
     }
 
@@ -393,14 +402,16 @@ function add-servicePrincipalGrants($servicePrincipalNa, $servicePrincipal) {
     $global:currentGrants = get-oauth2PermissionGrants($servicePrincipalNa.Id)
 
     $scope = "User.Read"
-    if (!($currentGrants.scope.Contains($scope))) {
-        add-servicePrincipalGrantScope -clientId $servicePrincipalNa.Id -resourceId =$AADServicePrincipalId -scope $scope
+    if (!$currentGrants -or !($currentGrants.scope.Contains($scope))) {
+       $result = add-servicePrincipalGrantScope -clientId $servicePrincipalNa.Id -resourceId $AADServicePrincipalId -scope $scope
     }
 
     $scope = "user_impersonation"
-    if (!($currentGrants.scope.Contains($scope))) {
-        add-servicePrincipalGrantScope -clientId $servicePrincipalNa.Id -resourceId =$servicePrincipal.Id -scope $scope
+    if (!$currentGrants -or !($currentGrants.scope.Contains($scope))) {
+        $result = $result -and (add-servicePrincipalGrantScope -clientId $servicePrincipalNa.Id -resourceId $servicePrincipal.Id -scope $scope)
     }
+
+    return $result
 }
 
 function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
@@ -416,6 +427,7 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
 
     $result = call-graphApi -uri $uri -headers $headers -body $oauth2PermissionGrants
     assert-notNull $result "aad app service principal oauth permissions $scope configuration failed"
+    return $result
 }
 
 main
