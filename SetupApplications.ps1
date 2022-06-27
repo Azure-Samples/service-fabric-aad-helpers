@@ -96,7 +96,6 @@ Param
 )
 
 . "$PSScriptRoot\Common.ps1"
-#$graphAPIFormat = $resourceUrl + "/" + $TenantId + "/{0}?api-version=1.5"
 $graphAPIFormat = $resourceUrl + "/v1.0/" + $TenantId + "/{0}"
 $global:ConfigObj = @{}
 
@@ -298,7 +297,7 @@ function add-OauthPermissions($webApp, $WebApplicationName) {
         }
     }
 
-    if ($result){
+    if ($result) {
         return $userImpersonationScopeId
     }
 
@@ -337,7 +336,6 @@ function add-servicePrincipal($webApp) {
 
 function get-nativeClient($webApp, $eventualHeaders) {
     # check for existing native clinet
-    #$uri = [string]::Format($graphAPIFormat, "applications?`$search=`"appId:$($webApp.appId)`"")
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"displayName:$NativeClientApplicationName`"")
    
     $nativeClient = (call-graphApi $uri -headers $eventualHeaders -body "" -method 'get').value
@@ -354,22 +352,20 @@ function get-nativeClient($webApp, $eventualHeaders) {
 
 function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId) {
     #Create Native Client Application
-    write-host "todo: webapp: $($webApp | convertto-json -depth 2)`r`n required resource access: $($requiredResourceAccess | convertto-json -depth 2)"
     $uri = [string]::Format($graphAPIFormat, "applications")
     $nativeAppResourceAccess = @($requiredResourceAccess.Clone())
 
     $nativeAppResourceAccess += @{
         resourceAppId  = $webApp.appId
         resourceAccess = @(@{
-                id   = $oauthPermissionsId #$webApp.oauth2PermissionScopes[0].id
+                id   = $oauthPermissionsId
                 type = 'Scope'
             })
     }
 
     $nativeAppResource = @{
-        publicClient           = @{ redirectUris = @("urn:ietf:wg:oauth:2.0:oob")}#$true
+        publicClient           = @{ redirectUris = @("urn:ietf:wg:oauth:2.0:oob") }
         displayName            = $NativeClientApplicationName
-        #replyUrls              = @("urn:ietf:wg:oauth:2.0:oob")
         requiredResourceAccess = $nativeAppResourceAccess
     }
 
@@ -403,7 +399,7 @@ function add-servicePrincipalGrants($servicePrincipalNa, $servicePrincipal) {
 
     $scope = "User.Read"
     if (!$currentGrants -or !($currentGrants.scope.Contains($scope))) {
-       $result = add-servicePrincipalGrantScope -clientId $servicePrincipalNa.Id -resourceId $AADServicePrincipalId -scope $scope
+        $result = add-servicePrincipalGrantScope -clientId $servicePrincipalNa.Id -resourceId $AADServicePrincipalId -scope $scope
     }
 
     $scope = "user_impersonation"
