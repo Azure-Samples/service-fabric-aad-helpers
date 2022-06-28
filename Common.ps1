@@ -28,6 +28,7 @@ function call-graphApi($uri, $headers, $body, $method = "Post") {
         $json = $body | ConvertTo-Json -Depth 99 -Compress
         write-host "Invoke-RestMethod $uri -Method $method -Headers $($headers | convertto-json) -Body $($body | convertto-json -depth 99)"
         $result = Invoke-RestMethod $uri -Method $method -Headers $headers -Body $json
+        write-verbose "call-graphApi result:$($result | convertto-json -depth 2)"
         return $result
     }
     catch [System.Exception] {
@@ -55,6 +56,7 @@ function get-RESTHeaders() {
     $authHeader = @{
         'Content-Type'  = 'application/json'
         'Authorization' = 'Bearer ' + $token
+        'ConsistencyLevel' = 'eventual'
     }
 
     write-host "auth header: $($authHeader | convertto-json)"
@@ -195,7 +197,7 @@ function get-RESTHeadersGraph($tenantId) {
     # Use common client 
     $clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e' # well-known ps graph client id generated on connect
     $grantType = 'urn:ietf:params:oauth:grant-type:device_code' #'client_credentials', #'authorization_code'
-    $scope = 'user.read openid profile Application.ReadWrite.All User.ReadWrite.All Directory.ReadWrite.All'
+    $scope = 'user.read openid profile Application.ReadWrite.All User.ReadWrite.All Directory.ReadWrite.All Directory.Read.All Domain.Read.All'
     if (!$global:accessToken -or ($global:accessTokenExpiration -lt (get-date)) -or $force) {
         $accessToken = get-restTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -scope $scope
     }

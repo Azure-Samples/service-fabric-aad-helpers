@@ -105,7 +105,7 @@ function main () {
     $configObj.TenantId = $TenantId
     $webApp = $null
     $eventualHeaders = $headers.clone()
-    [void]$eventualHeaders.Add('ConsistencyLevel' , 'eventual')
+    #[void]$eventualHeaders.Add('ConsistencyLevel' , 'eventual')
 
 
     if (!$WebApplicationName) {
@@ -354,7 +354,9 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
     #Create Native Client Application
     $uri = [string]::Format($graphAPIFormat, "applications")
     $nativeAppResourceAccess = @($requiredResourceAccess.Clone())
-
+    
+    # todo not working in ms sub tenant
+    # could be because of resource not existing?
     $nativeAppResourceAccess += @{
         resourceAppId  = $webApp.appId
         resourceAccess = @(@{
@@ -394,9 +396,10 @@ function add-servicePrincipalGrants($servicePrincipalNa, $servicePrincipal) {
     #OAuth2PermissionGrant
     #AAD service principal
     $AADServicePrincipalId = (get-servicePrincipalAAD).value.Id
-    assert-notNull $AADServicePrincipalId 'aad app service principal configuration failed'
+    assert-notNull $AADServicePrincipalId 'aad app service principal enumeration failed'
     $global:currentGrants = get-oauth2PermissionGrants($servicePrincipalNa.Id)
-
+    $result = $currentGrants
+    
     $scope = "User.Read"
     if (!$currentGrants -or !($currentGrants.scope.Contains($scope))) {
         $result = add-servicePrincipalGrantScope -clientId $servicePrincipalNa.Id -resourceId $AADServicePrincipalId -scope $scope

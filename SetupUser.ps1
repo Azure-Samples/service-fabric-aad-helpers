@@ -46,135 +46,216 @@ Setup up an admin user providing values for parameters
 
 Param
 (
-    [Parameter(ParameterSetName='Setting',Mandatory=$true)]
+    [Parameter(ParameterSetName = 'Setting', Mandatory = $true)]
     [String]
-	$TenantId,
+    $TenantId,
 	
-    [Parameter(ParameterSetName='Setting',Mandatory=$true)]
-	[String]
-	$WebApplicationId,
+    [Parameter(ParameterSetName = 'Setting', Mandatory = $true)]
+    [String]
+    $WebApplicationId,
 
-    [Parameter(ParameterSetName='Setting')]
-    [Parameter(ParameterSetName='ConfigObj')]
-	[String]
-	$UserName,
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
+    [String]
+    $UserName,
 
-    [Parameter(ParameterSetName='Setting',Mandatory=$true)]
-    [Parameter(ParameterSetName='ConfigObj',Mandatory=$true)]
-	[String]
-	$Password,
+    [Parameter(ParameterSetName = 'Setting', Mandatory = $true)]
+    [Parameter(ParameterSetName = 'ConfigObj', Mandatory = $true)]
+    [String]
+    $Password,
 
-    [Parameter(ParameterSetName='Setting')]
-    [Parameter(ParameterSetName='ConfigObj')]
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
     [Switch]
     $IsAdmin,
 
-    [Parameter(ParameterSetName='ConfigObj',Mandatory=$true)]
+    [Parameter(ParameterSetName = 'ConfigObj', Mandatory = $true)]
     [Hashtable]
     $ConfigObj,
 
-    [Parameter(ParameterSetName='Setting')]
-    [Parameter(ParameterSetName='ConfigObj')]
-    [ValidateSet('us','china')]
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
+    [ValidateSet('us', 'china')]
     [String]
-    $Location
+    $Location,
+
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
+    [String]
+    $Domain
 )
 
-if($ConfigObj)
-{
+if ($ConfigObj) {
     $TenantId = $ConfigObj.TenantId
 }
 
-Write-Host 'TenantId = ' $TenantId
-
 . "$PSScriptRoot\Common.ps1"
+$graphAPIFormat = $resourceUrl + "/v1.0/" + $TenantId + "/{0}"
+#$graphAPIFormat = $resourceUrl + "/beta/" + $TenantId + "/{0}"
+$servicePrincipalId = $null
+$WebApplicationId = $null
 
-$graphAPIFormat = $resourceUrl + "/" + $TenantId + "/{0}?api-version=1.5{1}"
+function main() {
+    Write-Host 'TenantId = ' $TenantId
 
-$uri = [string]::Format($graphAPIFormat, "tenantDetails", "")
-$domain = (Invoke-RestMethod $uri -Headers $headers).value.verifiedDomains[0].name
+    if ($ConfigObj) {
+        $WebApplicationId = $ConfigObj.WebAppId
+        $servicePrincipalId = $ConfigObj.ServicePrincipalId
+    }
 
-$servicePrincipalId = ""
-if($ConfigObj)
-{
-    $WebApplicationId = $ConfigObj.WebAppId
-    $servicePrincipalId = $ConfigObj.ServicePrincipalId
-}
-else
-{
-    $uri = [string]::Format($graphAPIFormat, "servicePrincipals", [string]::Format('&$filter=appId eq ''{0}''', $WebApplicationId))
-    $servicePrincipalId = (Invoke-RestMethod $uri -Headers $headers -ContentType "application/json").value.objectId
+    # get verified domain
+    $domain = get-verifiedDomain
+    assert-notNull $domain 'domain is not found'
+    
+    # get service principal id
+    $servicePrincipalId = get-servicePrincipalId
     assert-notNull $servicePrincipalId 'Service principal of web application is not found'
+
+    # get app roles
+    $appRoles = get-appRoles
+    assert-notNull $appRoles 'AppRoles of web application is not found'
+
+    # set user name
+    $userName = set-userName
+
+    # create user
+    $newUser = create-user -userName $userName -domain $domain -appRoles $appRoles
+    assert-notNull $newUser 'unable to create new user $userName'
+    return $newUser
 }
 
-$uri = [string]::Format($graphAPIFormat, "applications", [string]::Format('&$filter=appId eq ''{0}''', $WebApplicationId))
-$appRoles = (Invoke-RestMethod $uri -Headers $headers -ContentType "application/json").value.appRoles
-assert-notNull $appRoles 'AppRoles of web application is not found'
+function get-verifiedDomain() {
+    if (!$domain) {
+        $uri = [string]::Format($graphAPIFormat, "domains", "")
+        $domains = @((call-graphApi -uri $uri -Headers $headers -method 'get').value)
+        write-verbose "domain list: $($domains | convertto-json -depth 2)"
+        
+        $verifiedDomains = @($domains | Where-Object isVerified -eq $true)
+        write-verbose "verified domain list: $($verifiedDomains | convertto-json -depth 2)"
+        $verifiedDomain = @($domains | Where-Object { $_.isVerified -eq $true -and $_.isDefault -eq $true })
+        write-verbose "default verified domain: $($verifiedDomain | convertto-json -depth 2)"
 
-if (!$UserName)
-{
-    if($IsAdmin)
-    {
-	    $UserName = 'ServiceFabricAdmin'
-    }
-    else
-    {
-        $UserName = 'ServiceFabricUser'
-    }
-}
-
-#Create User
-$roleId = @{}
-$userId = ""
-$uri = [string]::Format($graphAPIFormat, "users", "")
-$newUser = @{
-        accountEnabled = "true"
-        displayName = $UserName
-        passwordProfile = @{
-            password = $Password
-            forceChangePasswordNextLogin = "false"
+        if ($verifiedDomains.count -gt 1 -and $verifiedDomain) {
+            write-warning "multiple domains detected. please rerun script using -domain argument for non default domain."
+            write-host "verified domains: $($verifiedDomains | convertto-json -depth 2)"
+            write-host "using default verified domain: $($verifiedDomain | convertto-json -depth 2)" -ForegroundColor Green
+            $domain = $verifiedDomain.id
         }
-        mailNickname = $UserName
-        userPrincipalName = [string]::Format("{0}@{1}", $UserName, $domain)
-    }
-#Admin
-if($IsAdmin)
-{
-    Write-Host 'Creating Admin User: Name = ' $UserName 'Password = ' $Password
-    $userId = (call-graphApi $uri $headers $newUser).objectId
-    assert-notNull $userId 'Admin User Creation Failed'
-    Write-Host 'Admin User Created:' $userId
-    $roleId = foreach ($appRole in $appRoles) 
-    {
-        if($appRole.value -eq "Admin") 
-        {
-            $appRole.id
-            break
+        elseif ($verifiedDomains.count -gt 1 -and !$verifiedDomain) {
+            write-error "multiple domains detected. please rerun script using -domain argument."
+            write-host "verified domain list: $($verifiedDomains | convertto-json -depth 2)"
+        }
+        elseif ($verifiedDomains.count -lt 1) {
+            write-error "no domains detected. please rerun script using -domain argument for proper domain."
+        }
+        else {
+            $domain = $verifiedDomains[0].id
         }
     }
-}
-#Read-Only User
-else{
-    Write-Host 'Creating Read-Only User: Name = ' $UserName 'Password = ' $Password
-    $userId = (call-graphApi $uri $headers $newUser).objectId
-    assert-notNull $userId 'Read-Only User Creation Failed'
-    Write-Host 'Read-Only User Created:' $userId
-    $roleId = foreach ($appRole in $appRoles) 
-    {
-        if($appRole.value -eq "User") 
-        {
-            $appRole.id
-            break
-        }
-    }
+
+    return $domain
 }
 
-#User Role
-$uri = [string]::Format($graphAPIFormat, [string]::Format("users/{0}/appRoleAssignments", $userId), "")
-$appRoleAssignments = @{
-    id = $roleId
-    principalId = $userId
-    principalType = "User"
-    resourceId = $servicePrincipalId
+function get-servicePrincipalId() {
+    if (!$servicePrincipalId) {
+        #$uri = [string]::Format($graphAPIFormat, "servicePrincipals", [string]::Format('&$filter=appId eq ''{0}''', $WebApplicationId))
+        $uri = [string]::Format($graphAPIFormat, "servicePrincipals?`$search=`"appId:$WebApplicationId`"")
+        $servicePrincipalId = (call-graphApi -uri $uri -Headers $headers -method 'get').value.objectId
+    }
+
+    return $servicePrincipalId
 }
-call-graphApi $uri $headers $appRoleAssignments | Out-Null
+
+function get-appRoles() {
+    $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"appId:$WebApplicationId`"")
+    $appRoles = (call-graphApi -uri $uri -Headers $headers -method 'get').value.appRoles
+    
+    return $appRoles
+}
+
+function get-roleId($appRoles) {
+    $appRoleType = 'User'
+    if ($IsAdmin) {
+        $appRoleType = 'Admin'
+    }
+
+    $roleId = ($appRoles | Where-Object value -eq $appRoleType | Select-Object id).id
+    write-verbose "roleId: $roleId"
+    return  $roleId
+}
+
+function set-userName() {
+    if (!$UserName) {
+        if ($IsAdmin) {
+            $UserName = 'ServiceFabricAdmin'
+        }
+        else {
+            $UserName = 'ServiceFabricUser'
+        }
+    }
+    
+    return $UserName
+}
+
+function get-user($UserPrincipalName) {
+    #$uri = [string]::Format($graphAPIFormat, "users", [string]::Format('&$filter=displayName eq ''{0}''', $UserName))
+    $uri = [string]::Format($graphAPIFormat, "users?`$search=`"userPrincipalName:$userPrincipalName`"")
+    $user = (call-graphApi -uri $uri -Headers $headers -method 'get')
+    write-verbose "user: $($user | convertto-json -depth 2)"
+    return $user
+}
+
+function create-user($userName, $domain, $appRoles) {
+    #Create User
+    $userPrincipalName = [string]::Format("{0}@{1}", $UserName, $domain)
+    $roleId = get-roleId -appRoles $appRoles
+    $userId = (get-user -UserPrincipalName $userPrincipalName).value.id #.objectId
+
+    if (!$userId) {
+        $uri = [string]::Format($graphAPIFormat, "users", "")
+        $newUser = @{
+            accountEnabled    = $true
+            displayName       = $UserName
+            passwordProfile   = @{
+                password = $Password
+            }
+            mailNickname      = $UserName
+            userPrincipalName = $userPrincipalName
+        }
+        #Admin
+        if ($IsAdmin) {
+            Write-Host 'Creating Admin User: Name = ' $UserName 'Password = ' $Password
+            $userId = (call-graphApi -uri $uri -header $headers -body $newUser).value.id #.objectId
+            assert-notNull $userId 'Admin User Creation Failed'
+            Write-Host 'Admin User Created:' $userId
+        }
+        #Read-Only User
+        else {
+            Write-Host 'Creating Read-Only User: Name = ' $UserName 'Password = ' $Password
+            $userId = (call-graphApi -uri $uri -header $headers -body $newUser).value.id #.objectId
+            assert-notNull $userId 'Read-Only User Creation Failed'
+            Write-Host 'Read-Only User Created:' $userId
+        }
+    }
+    
+    write-host "role id: $roleId"
+    $roles = create-userRole -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId
+    return $roles
+}
+
+function create-userRole($userId, $roleId, $servicePrincipalId) {
+    #User Role
+    $uri = [string]::Format($graphAPIFormat, "users/$userId/appRoleAssignments")
+    $appRoleAssignments = @{
+        id            = $roleId
+        principalId   = $userId
+        principalType = "User"
+        resourceId    = $servicePrincipalId
+    }
+
+    $results = call-graphApi -uri $uri -header $headers -body $appRoleAssignments
+    write-host "create role results: $($results | convertto-json -Depth 2)"
+    return $results
+}
+
+main
