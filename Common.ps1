@@ -26,13 +26,15 @@ function call-graphApi($uri, $headers, $body, $method = "Post") {
     try {
         $error.clear()
         $json = $body | ConvertTo-Json -Depth 99 -Compress
-        write-host "Invoke-RestMethod $uri -Method $method -Headers $($headers | convertto-json) -Body $($body | convertto-json -depth 99)"
+        $logHeaders = $headers.clone()
+        $logHeaders.Authorization = $logHeaders.Authorization.substring(0,30) + '...'
+        write-host "invoke-restMethod $uri -method $method -headers $($logHeaders | convertto-json) -body $($body | convertto-json -depth 99)" -ForegroundColor Green
         $result = Invoke-RestMethod $uri -Method $method -Headers $headers -Body $json
-        write-verbose "call-graphApi result:$($result | convertto-json -depth 2)"
+        write-host "invoke-restMethod result:$($result | convertto-json -depth 5)" -ForegroundColor cyan
         return $result
     }
     catch [System.Exception] {
-        write-warning "call-graphApi exception:`r`n$($_.Exception.Message)`r`n$($error | out-string)"
+        write-warning "call-graphApi exception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"
         return $null
     }
 }
@@ -160,9 +162,10 @@ function get-restTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $sc
     write-verbose ($params | convertto-json)
     write-host "invoke-restMethod $uri" -ForegroundColor Cyan
 
-    $startTime = (get-date).AddSeconds($global:authresult.expires_in)
+    $endTime = (get-date).AddSeconds($global:authresult.expires_in / 2)
 
-    while ($startTime -gt (get-date)) {
+    while ($endTime -gt (get-date)) {
+        write-verbose "logon timeout: $endTime current time: $(get-date)"
         $error.Clear()
 
         try {
