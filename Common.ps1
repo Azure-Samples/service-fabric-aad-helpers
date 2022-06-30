@@ -22,7 +22,7 @@ function assert-notNull($obj, $msg) {
     }
 }
 
-function call-graphApi($uri, $headers, $body, $method = "Post") {
+function call-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $method = 'post') {
     try {
         $error.clear()
         $json = $body | ConvertTo-Json -Depth 99 -Compress
@@ -242,6 +242,7 @@ switch ($Location) {
 }
 
 $headers = main
+$global:defaultHeaders = $headers
 
 if ($ClusterName) {
     $WebApplicationName = $ClusterName + "_Cluster"

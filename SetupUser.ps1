@@ -89,6 +89,7 @@ if ($ConfigObj) {
     $TenantId = $ConfigObj.TenantId
 }
 
+$headers = $null
 . "$PSScriptRoot\Common.ps1"
 $graphAPIFormat = $resourceUrl + "/v1.0/" + $TenantId + "/{0}"
 #$graphAPIFormat = $resourceUrl + "/beta/" + $TenantId + "/{0}"
@@ -100,7 +101,7 @@ function main() {
 
     if ($ConfigObj) {
         $WebApplicationId = $ConfigObj.WebAppId
-        $servicePrincipalId = $ConfigObj.ServicePrincipalId
+        $servicePrincipalId = $ConfigObj.NativeClientAppId # $ConfigObj.ServicePrincipalId
     }
 
     # get verified domain
@@ -127,7 +128,7 @@ function main() {
 function get-verifiedDomain() {
     if (!$domain) {
         $uri = [string]::Format($graphAPIFormat, "domains", "")
-        $domains = @((call-graphApi -uri $uri -Headers $headers -method 'get').value)
+        $domains = @((call-graphApi -uri $uri -method 'get').value)
         write-verbose "domain list: $($domains | convertto-json -depth 2)"
         
         $verifiedDomains = @($domains | Where-Object isVerified -eq $true)
@@ -160,7 +161,7 @@ function get-servicePrincipalId() {
     if (!$servicePrincipalId) {
         #$uri = [string]::Format($graphAPIFormat, "servicePrincipals", [string]::Format('&$filter=appId eq ''{0}''', $WebApplicationId))
         $uri = [string]::Format($graphAPIFormat, "servicePrincipals?`$search=`"appId:$WebApplicationId`"")
-        $servicePrincipalId = (call-graphApi -uri $uri -Headers $headers -method 'get').value.objectId
+        $servicePrincipalId = (call-graphApi -uri $uri -method 'get').value.id #objectId
     }
 
     return $servicePrincipalId
@@ -168,7 +169,7 @@ function get-servicePrincipalId() {
 
 function get-appRoles() {
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"appId:$WebApplicationId`"")
-    $appRoles = (call-graphApi -uri $uri -Headers $headers -method 'get').value.appRoles
+    $appRoles = (call-graphApi -uri $uri -method 'get').value.appRoles
     
     return $appRoles
 }
@@ -200,7 +201,7 @@ function set-userName() {
 function get-user($UserPrincipalName) {
     #$uri = [string]::Format($graphAPIFormat, "users", [string]::Format('&$filter=displayName eq ''{0}''', $UserName))
     $uri = [string]::Format($graphAPIFormat, "users?`$search=`"userPrincipalName:$userPrincipalName`"")
-    $user = (call-graphApi -uri $uri -Headers $headers -method 'get')
+    $user = (call-graphApi -uri $uri -method 'get')
     write-verbose "user: $($user | convertto-json -depth 2)"
     return $user
 }
@@ -225,14 +226,14 @@ function create-user($userName, $domain, $appRoles) {
         #Admin
         if ($IsAdmin) {
             Write-Host 'Creating Admin User: Name = ' $UserName 'Password = ' $Password
-            $userId = (call-graphApi -uri $uri -header $headers -body $newUser).value.id #.objectId
+            $userId = (call-graphApi -uri $uri -body $newUser).value.id #.objectId
             assert-notNull $userId 'Admin User Creation Failed'
             Write-Host 'Admin User Created:' $userId
         }
         #Read-Only User
         else {
             Write-Host 'Creating Read-Only User: Name = ' $UserName 'Password = ' $Password
-            $userId = (call-graphApi -uri $uri -header $headers -body $newUser).value.id #.objectId
+            $userId = (call-graphApi -uri $uri -body $newUser).value.id #.objectId
             assert-notNull $userId 'Read-Only User Creation Failed'
             Write-Host 'Read-Only User Created:' $userId
         }
@@ -253,7 +254,7 @@ function create-userRole($userId, $roleId, $servicePrincipalId) {
         resourceId    = $servicePrincipalId
     }
 
-    $results = call-graphApi -uri $uri -header $headers -body $appRoleAssignments
+    $results = call-graphApi -uri $uri -body $appRoleAssignments
     write-host "create role results: $($results | convertto-json -Depth 2)"
     return $results
 }
