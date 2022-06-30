@@ -115,17 +115,6 @@ function main () {
     $configObj.TenantId = $TenantId
     $webApp = $null
 
-    if ($remove) {
-        write-host "removing service principals"
-        $result = remove-servicePrincipals -headers $headers
-
-        write-warning "removing app registrations"
-        $result = $result -and (remove-appRegistration -WebApplicationUri $WebApplicationUri -headers $headers)
-
-        
-        return $result
-    }
-
     if (!$WebApplicationName) {
         $WebApplicationName = "ServiceFabricCluster"
     }
@@ -146,6 +135,20 @@ function main () {
                 })
         })
 
+    # cleanup
+    if ($remove) {
+        write-host "removing service principals"
+        $result = remove-servicePrincipals -headers $headers
+    
+        write-warning "removing app registration"
+        $result = $result -and (remove-appRegistration -WebApplicationUri $WebApplicationUri -headers $headers)
+    
+        write-warning "removing native app registration"
+        $result = $result -and (remove-nativeClient -nativeClientApplicationName $NativeClientApplicationName -headers $headers)
+            
+        return $result
+    }
+    
     # check / add app registration
     $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri -headers $headers
     if (!$webApp) {
@@ -176,7 +179,7 @@ function main () {
     $configObj.ServicePrincipalId = $servicePrincipal.Id
 
     # check / add native app
-    $nativeApp = get-nativeClient -webApp $webApp -WebApplicationUri $WebApplicationUri -headers $headers
+    $nativeApp = get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri -headers $headers
     if (!$nativeApp) {
         $nativeApp = add-nativeClient -webApp $webApp -requiredResourceAccess $requiredResourceAccess -oauthPermissionsId $oauthPermissionsId
     }
@@ -388,7 +391,7 @@ function get-appRegistration($WebApplicationUri, $headers) {
     return $null
 }
 
-function get-nativeClient($webApp, $headers) {
+function get-nativeClient($NativeClientApplicationName, $headers) {
     # check for existing native clinet
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"displayName:$NativeClientApplicationName`"")
    
@@ -464,6 +467,22 @@ function remove-appRegistration($WebApplicationUri, $headers) {
     return $false
 }
 
+function remove-nativeClient($NativeClientApplicationName, $headers) {
+    # remove app registration
+    $nativeApp = get-nativeClient -nativeClientApplicationName $NativeClientApplicationName -headers $headers
+    if (!$nativeApp) {
+        return $true
+    } 
+
+    $uri = [string]::Format($graphAPIFormat, "applications/$($nativeApp.id)")
+    $nativeApp = (call-graphApi $uri -headers $headers -body "" -method 'delete')
+
+    if (!$nativeApp) {
+        return $true
+    }
+    return $false
+}
+
 function remove-servicePrincipals($headers) {
     $result = $true
     $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri -headers $headers
@@ -475,7 +494,7 @@ function remove-servicePrincipals($headers) {
         }
     }
     
-    $nativeApp = get-nativeClient -webApp $webApp -WebApplicationUri $WebApplicationUri -headers $headers
+    $nativeApp = get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri -headers $headers
     if ($nativeApp) {
         $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp -headers $headers
         if ($servicePrincipalNa) {
