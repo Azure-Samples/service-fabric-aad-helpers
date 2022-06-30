@@ -212,38 +212,6 @@ function main () {
     return $configObj
 }
 
-function remove-appRegistration($WebApplicationUri, $headers) {
-    # remove app registration
-    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri -headers $headers
-    if (!$webApp) {
-        return $true
-    } 
-
-    $uri = [string]::Format($graphAPIFormat, "applications/$($webApp.id)")
-    $webApp = (call-graphApi $uri -headers $headers -body "" -method 'delete')
-
-    if (!$webApp) {
-        return $true
-    }
-    return $false
-}
-
-function get-appRegistration($WebApplicationUri, $headers) {
-    # check for existing app by identifieruri
-    $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"identifierUris:$WebApplicationUri`"")
-   
-    $webApp = (call-graphApi $uri -headers $headers -body "" -method 'get').value
-    write-host "currentAppRegistration:$webApp"
-
-    if ($webApp) {
-        write-host "app registration $($webApp.appId) with $WebApplicationUri already exists." -foregroundcolor yellow
-        write-host "currentAppRegistration:$($webApp|convertto-json -depth 99)"
-        return $webApp
-    }
-
-    return $null
-}
-
 function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requiredResourceAccess) {
     #Create Web Application
     write-host "creating app registration with $WebApplicationUri." -foregroundcolor yellow
@@ -299,16 +267,29 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
     return $webApp
 }
 
-function get-OauthPermissions($webApp) {
-    # Check for an existing delegated permission with value "user_impersonation". Normally this is created by default,
-    # but if it isn't, we need to update the Application object with a new one.
-    $user_impersonation_scope = $webApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq "user_impersonation" }
-    if ($user_impersonation_scope) {
-        write-host "user_impersonation scope already exists. $($user_impersonation_scope.id)" -ForegroundColor yellow
-        return $user_impersonation_scope.id
+function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId) {
+    #Create Native Client Application
+    $uri = [string]::Format($graphAPIFormat, "applications")
+    $nativeAppResourceAccess = @($requiredResourceAccess.Clone())
+    
+    # todo not working in ms sub tenant
+    # could be because of resource not existing?
+    $nativeAppResourceAccess += @{
+        resourceAppId  = $webApp.appId
+        resourceAccess = @(@{
+                id   = $oauthPermissionsId
+                type = 'Scope'
+            })
     }
 
-    return $null
+    $nativeAppResource = @{
+        publicClient           = @{ redirectUris = @("urn:ietf:wg:oauth:2.0:oob") }
+        displayName            = $NativeClientApplicationName
+        requiredResourceAccess = $nativeAppResourceAccess
+    }
+
+    $nativeApp = call-graphApi -uri $uri -headers $headers -body $nativeAppResource
+    return $nativeApp
 }
 
 function add-OauthPermissions($webApp, $WebApplicationName) {
@@ -340,123 +321,12 @@ function add-OauthPermissions($webApp, $WebApplicationName) {
     return $null
 }
 
-function get-servicePrincipal($webApp, $headers) {
-    # check for existing app by identifieruri
-    $uri = [string]::Format($graphAPIFormat, "servicePrincipals?`$search=`"appId:$($webApp.appId)`"")
-   
-    $servicePrincipal = (call-graphApi $uri -headers $headers -body "" -method 'get').value
-    write-host "servicePrincipal:$servicePrincipal"
-
-    if ($servicePrincipal) {
-        write-host "service principal $($servicePrincipal.appId) already exists." -foregroundcolor yellow
-        write-host "current service principal:$($servicePrincipal|convertto-json -depth 99)"
-        return $servicePrincipal
-    }
-
-    return $null
-}
-
-function add-servicePrincipal($webApp) {
-    #Service Principal
-    $uri = [string]::Format($graphAPIFormat, "servicePrincipals")
-    $servicePrincipal = @{
-        accountEnabled            = $false
-        appId                     = $webApp.appId
-        displayName               = $webApp.displayName
-        appRoleAssignmentRequired = $true
-    }
-
-    $servicePrincipal = call-graphApi -uri $uri -headers $headers -body $servicePrincipal
-    return $servicePrincipal
-}
-
-function remove-servicePrincipals($headers) {
-    $result = $true
-    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri -headers $headers
-    if ($webApp) {
-        $servicePrincipal = get-servicePrincipal -webApp $webApp -headers $headers
-        if ($servicePrincipal) {
-            $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipal.id)")
-            $result = $result -and (call-graphApi $uri -headers $headers -body "" -method 'delete')
-        }
-    }
-    
-    $nativeApp = get-nativeClient -webApp $webApp -WebApplicationUri $WebApplicationUri -headers $headers
-    if ($nativeApp) {
-        $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp -headers $headers
-        if ($servicePrincipalNa) {
-            $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipalNa.id)")
-            $result = $result -and (call-graphApi $uri -headers $headers -body "" -method 'delete')
-        }    
-    }
-
-    return $result
-}
-
-function get-nativeClient($webApp, $headers) {
-    # check for existing native clinet
-    $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"displayName:$NativeClientApplicationName`"")
-   
-    $nativeClient = (call-graphApi $uri -headers $headers -body "" -method 'get').value
-    write-host "nativeClient:$nativeClient"
-
-    if ($nativeClient) {
-        write-host "native client $($nativeClient.appId) with $WebApplicationUri already exists." -foregroundcolor yellow
-        write-host "current service principal:$($nativeClient|convertto-json -depth 99)"
-        return $nativeClient
-    }
-
-    return $null
-}
-
-function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId) {
-    #Create Native Client Application
-    $uri = [string]::Format($graphAPIFormat, "applications")
-    $nativeAppResourceAccess = @($requiredResourceAccess.Clone())
-    
-    # todo not working in ms sub tenant
-    # could be because of resource not existing?
-    $nativeAppResourceAccess += @{
-        resourceAppId  = $webApp.appId
-        resourceAccess = @(@{
-                id   = $oauthPermissionsId
-                type = 'Scope'
-            })
-    }
-
-    $nativeAppResource = @{
-        publicClient           = @{ redirectUris = @("urn:ietf:wg:oauth:2.0:oob") }
-        displayName            = $NativeClientApplicationName
-        requiredResourceAccess = $nativeAppResourceAccess
-    }
-
-    $nativeApp = call-graphApi -uri $uri -headers $headers -body $nativeAppResource
-    return $nativeApp
-}
-
-function get-servicePrincipalAAD() {
-    # get 'Windows Azure Active Directory' app registration by well-known appId
-    $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + '?$filter=appId eq ''00000002-0000-0000-c000-000000000000'''
-    $global:AADServicePrincipal = call-graphApi -uri $uri -Headers $headers -method 'get'
-    write-verbose "aad service princiapal:$($AADServicePrincipal | convertto-json -depth 2)"
-    return $AADServicePrincipal
-}
-
-function get-oauth2PermissionGrants($clientId) {
-    # get 'Windows Azure Active Directory' app registration by well-known appId
-    $uri = [string]::Format($graphAPIFormat, "oauth2PermissionGrants") + "?`$filter=clientId eq '$clientId'"
-    $grants = call-graphApi -uri $uri -Headers $headers -method 'get'
-    write-verbose "grants:$($grants | convertto-json -depth 2)"
-    return $grants.value
-}
-
-
 function add-servicePrincipalGrants($servicePrincipalNa, $servicePrincipal) {
     #OAuth2PermissionGrant
     #AAD service principal
     $AADServicePrincipalId = (get-servicePrincipalAAD).value.Id
     assert-notNull $AADServicePrincipalId 'aad app service principal enumeration failed'
-    $global:currentGrants = get-oauth2PermissionGrants($servicePrincipalNa.Id)
+    $global:currentGrants = get-oauthPermissionGrants($servicePrincipalNa.Id)
     $result = $currentGrants
     
     $scope = "User.Read"
@@ -485,6 +355,135 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
 
     $result = call-graphApi -uri $uri -headers $headers -body $oauth2PermissionGrants
     assert-notNull $result "aad app service principal oauth permissions $scope configuration failed"
+    return $result
+}
+
+function add-servicePrincipal($webApp) {
+    #Service Principal
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals")
+    $servicePrincipal = @{
+        accountEnabled            = $false
+        appId                     = $webApp.appId
+        displayName               = $webApp.displayName
+        appRoleAssignmentRequired = $true
+    }
+
+    $servicePrincipal = call-graphApi -uri $uri -headers $headers -body $servicePrincipal
+    return $servicePrincipal
+}
+
+function get-appRegistration($WebApplicationUri, $headers) {
+    # check for existing app by identifieruri
+    $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"identifierUris:$WebApplicationUri`"")
+   
+    $webApp = (call-graphApi $uri -headers $headers -body "" -method 'get').value
+    write-host "currentAppRegistration:$webApp"
+
+    if ($webApp) {
+        write-host "app registration $($webApp.appId) with $WebApplicationUri already exists." -foregroundcolor yellow
+        write-host "currentAppRegistration:$($webApp|convertto-json -depth 99)"
+        return $webApp
+    }
+
+    return $null
+}
+
+function get-nativeClient($webApp, $headers) {
+    # check for existing native clinet
+    $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"displayName:$NativeClientApplicationName`"")
+   
+    $nativeClient = (call-graphApi $uri -headers $headers -body "" -method 'get').value
+    write-host "nativeClient:$nativeClient"
+
+    if ($nativeClient) {
+        write-host "native client $($nativeClient.appId) with $WebApplicationUri already exists." -foregroundcolor yellow
+        write-host "current service principal:$($nativeClient|convertto-json -depth 99)"
+        return $nativeClient
+    }
+
+    return $null
+}
+
+function get-OauthPermissions($webApp) {
+    # Check for an existing delegated permission with value "user_impersonation". Normally this is created by default,
+    # but if it isn't, we need to update the Application object with a new one.
+    $user_impersonation_scope = $webApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq "user_impersonation" }
+    if ($user_impersonation_scope) {
+        write-host "user_impersonation scope already exists. $($user_impersonation_scope.id)" -ForegroundColor yellow
+        return $user_impersonation_scope.id
+    }
+
+    return $null
+}
+
+function get-oauthPermissionGrants($clientId) {
+    # get 'Windows Azure Active Directory' app registration by well-known appId
+    $uri = [string]::Format($graphAPIFormat, "oauth2PermissionGrants") + "?`$filter=clientId eq '$clientId'"
+    $grants = call-graphApi -uri $uri -Headers $headers -method 'get'
+    write-verbose "grants:$($grants | convertto-json -depth 2)"
+    return $grants.value
+}
+
+function get-servicePrincipal($webApp, $headers) {
+    # check for existing app by identifieruri
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals?`$search=`"appId:$($webApp.appId)`"")
+   
+    $servicePrincipal = (call-graphApi $uri -headers $headers -body "" -method 'get').value
+    write-host "servicePrincipal:$servicePrincipal"
+
+    if ($servicePrincipal) {
+        write-host "service principal $($servicePrincipal.appId) already exists." -foregroundcolor yellow
+        write-host "current service principal:$($servicePrincipal|convertto-json -depth 99)"
+        return $servicePrincipal
+    }
+
+    return $null
+}
+
+function get-servicePrincipalAAD() {
+    # get 'Windows Azure Active Directory' app registration by well-known appId
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + '?$filter=appId eq ''00000002-0000-0000-c000-000000000000'''
+    $global:AADServicePrincipal = call-graphApi -uri $uri -Headers $headers -method 'get'
+    write-verbose "aad service princiapal:$($AADServicePrincipal | convertto-json -depth 2)"
+    return $AADServicePrincipal
+}
+
+function remove-appRegistration($WebApplicationUri, $headers) {
+    # remove app registration
+    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri -headers $headers
+    if (!$webApp) {
+        return $true
+    } 
+
+    $uri = [string]::Format($graphAPIFormat, "applications/$($webApp.id)")
+    $webApp = (call-graphApi $uri -headers $headers -body "" -method 'delete')
+
+    if (!$webApp) {
+        return $true
+    }
+    return $false
+}
+
+function remove-servicePrincipals($headers) {
+    $result = $true
+    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri -headers $headers
+    if ($webApp) {
+        $servicePrincipal = get-servicePrincipal -webApp $webApp -headers $headers
+        if ($servicePrincipal) {
+            $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipal.id)")
+            $result = $result -and (call-graphApi $uri -headers $headers -body "" -method 'delete')
+        }
+    }
+    
+    $nativeApp = get-nativeClient -webApp $webApp -WebApplicationUri $WebApplicationUri -headers $headers
+    if ($nativeApp) {
+        $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp -headers $headers
+        if ($servicePrincipalNa) {
+            $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipalNa.id)")
+            $result = $result -and (call-graphApi $uri -headers $headers -body "" -method 'delete')
+        }    
+    }
+
     return $result
 }
 
