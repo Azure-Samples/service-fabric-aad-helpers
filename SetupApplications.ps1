@@ -65,6 +65,12 @@ Param
     [String]
     $WebApplicationUri,
 
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [String]
+    [ValidateSet('AzureADMyOrg', 'AzureADMultipleOrgs', 'AzureADandPersonalMicrosoftAccount')]
+    $signInAudience = 'AzureADMyOrg',
+
     [Parameter(ParameterSetName = 'Customize', Mandatory = $true)]
     [Parameter(ParameterSetName = 'Prefix', Mandatory = $true)]
     [String]
@@ -91,7 +97,11 @@ Param
     
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
-    [Switch]$force
+    [Switch]$force,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [Switch]$remove
 
 )
 
@@ -104,9 +114,17 @@ function main () {
     $configObj.ClusterName = $clusterName
     $configObj.TenantId = $TenantId
     $webApp = $null
-    $eventualHeaders = $headers.clone()
-    #[void]$eventualHeaders.Add('ConsistencyLevel' , 'eventual')
 
+    if ($remove) {
+        write-host "removing service principals"
+        $result = remove-servicePrincipals -headers $headers
+
+        write-warning "removing app registrations"
+        $result = $result -and (remove-appRegistration -WebApplicationUri $WebApplicationUri -headers $headers)
+
+        
+        return $result
+    }
 
     if (!$WebApplicationName) {
         $WebApplicationName = "ServiceFabricCluster"
@@ -129,7 +147,7 @@ function main () {
         })
 
     # check / add app registration
-    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri -eventualHeaders $eventualHeaders
+    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri -headers $headers
     if (!$webApp) {
         $webApp = add-appRegistration -WebApplicationUri $WebApplicationUri `
             -WebApplicationReplyUrl $WebApplicationReplyUrl `
@@ -149,7 +167,7 @@ function main () {
     Write-Host "Web Application Oauth permissions created: $($oauthPermissionsId|convertto-json)"  -ForegroundColor Green
 
     # check / add servicePrincipal
-    $servicePrincipal = get-servicePrincipal -webApp $webApp -eventualHeaders $eventualHeaders
+    $servicePrincipal = get-servicePrincipal -webApp $webApp -headers $headers
     if (!$servicePrincipal) {
         $servicePrincipal = add-servicePrincipal -webApp $webApp
     }
@@ -158,7 +176,7 @@ function main () {
     $configObj.ServicePrincipalId = $servicePrincipal.Id
 
     # check / add native app
-    $nativeApp = get-nativeClient -webApp $webApp -WebApplicationUri $WebApplicationUri -eventualHeaders $eventualHeaders
+    $nativeApp = get-nativeClient -webApp $webApp -WebApplicationUri $WebApplicationUri -headers $headers
     if (!$nativeApp) {
         $nativeApp = add-nativeClient -webApp $webApp -requiredResourceAccess $requiredResourceAccess -oauthPermissionsId $oauthPermissionsId
     }
@@ -167,7 +185,7 @@ function main () {
     $configObj.NativeClientAppId = $nativeApp.appId
 
     # check / add native app service principal
-    $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp -eventualHeaders $eventualHeaders
+    $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp -headers $headers
     if (!$servicePrincipalNa) {
         $servicePrincipalNa = add-servicePrincipal -webApp $nativeApp
     }
@@ -177,7 +195,7 @@ function main () {
     # check / add native app service principal AAD
     $servicePrincipalAAD = add-servicePrincipalGrants -servicePrincipalNa $servicePrincipalNa `
         -servicePrincipal $servicePrincipal `
-        -eventualHeaders $eventualHeaders
+        -headers $headers
 
     assert-notNull $servicePrincipalAAD 'aad app service principal configuration failed'
     Write-Host "AAD Application Configured: $($servicePrincipalAAD)"  -ForegroundColor Green
@@ -194,11 +212,27 @@ function main () {
     return $configObj
 }
 
-function get-appRegistration($WebApplicationUri, $eventualHeaders) {
+function remove-appRegistration($WebApplicationUri, $headers) {
+    # remove app registration
+    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri -headers $headers
+    if (!$webApp) {
+        return $true
+    } 
+
+    $uri = [string]::Format($graphAPIFormat, "applications/$($webApp.id)")
+    $webApp = (call-graphApi $uri -headers $headers -body "" -method 'delete')
+
+    if (!$webApp) {
+        return $true
+    }
+    return $false
+}
+
+function get-appRegistration($WebApplicationUri, $headers) {
     # check for existing app by identifieruri
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"identifierUris:$WebApplicationUri`"")
    
-    $webApp = (call-graphApi $uri -headers $eventualHeaders -body "" -method 'get').value
+    $webApp = (call-graphApi $uri -headers $headers -body "" -method 'get').value
     write-host "currentAppRegistration:$webApp"
 
     if ($webApp) {
@@ -242,6 +276,7 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
     if ($AddResourceAccess) {
         $webApp = @{
             displayName            = $WebApplicationName
+            signInAudience         = $signInAudience
             identifierUris         = @($WebApplicationUri)
             defaultRedirectUri     = $WebApplicationReplyUrl
             appRoles               = $appRole
@@ -252,6 +287,7 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
     else {
         $webApp = @{
             displayName        = $WebApplicationName
+            signInAudience     = $signInAudience
             identifierUris     = @($WebApplicationUri)
             defaultRedirectUri = $WebApplicationReplyUrl
             appRoles           = $appRole
@@ -304,11 +340,11 @@ function add-OauthPermissions($webApp, $WebApplicationName) {
     return $null
 }
 
-function get-servicePrincipal($webApp, $eventualHeaders) {
+function get-servicePrincipal($webApp, $headers) {
     # check for existing app by identifieruri
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals?`$search=`"appId:$($webApp.appId)`"")
    
-    $servicePrincipal = (call-graphApi $uri -headers $eventualHeaders -body "" -method 'get').value
+    $servicePrincipal = (call-graphApi $uri -headers $headers -body "" -method 'get').value
     write-host "servicePrincipal:$servicePrincipal"
 
     if ($servicePrincipal) {
@@ -334,11 +370,34 @@ function add-servicePrincipal($webApp) {
     return $servicePrincipal
 }
 
-function get-nativeClient($webApp, $eventualHeaders) {
+function remove-servicePrincipals($headers) {
+    $result = $true
+    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri -headers $headers
+    if ($webApp) {
+        $servicePrincipal = get-servicePrincipal -webApp $webApp -headers $headers
+        if ($servicePrincipal) {
+            $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipal.id)")
+            $result = $result -and (call-graphApi $uri -headers $headers -body "" -method 'delete')
+        }
+    }
+    
+    $nativeApp = get-nativeClient -webApp $webApp -WebApplicationUri $WebApplicationUri -headers $headers
+    if ($nativeApp) {
+        $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp -headers $headers
+        if ($servicePrincipalNa) {
+            $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipalNa.id)")
+            $result = $result -and (call-graphApi $uri -headers $headers -body "" -method 'delete')
+        }    
+    }
+
+    return $result
+}
+
+function get-nativeClient($webApp, $headers) {
     # check for existing native clinet
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"displayName:$NativeClientApplicationName`"")
    
-    $nativeClient = (call-graphApi $uri -headers $eventualHeaders -body "" -method 'get').value
+    $nativeClient = (call-graphApi $uri -headers $headers -body "" -method 'get').value
     write-host "nativeClient:$nativeClient"
 
     if ($nativeClient) {
