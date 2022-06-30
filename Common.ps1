@@ -35,10 +35,16 @@ function call-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $met
         write-host "Invoke-WebRequest result:$resultJson" -ForegroundColor cyan
         if($result.StatusCode -ne 200){
             switch($result.StatusCode){
+                201 {
+                    if($method -ieq 'post'){
+                        # created
+                        return $resultObj
+                    }
+                }
                 204 {
                     if($method -ieq 'patch'){
                         # successful patch
-                        return $result
+                        return $resultObj
                     }
                     return $null
                 }
@@ -216,7 +222,7 @@ function get-RESTHeadersGraph($tenantId) {
     # Use common client 
     $clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e' # well-known ps graph client id generated on connect
     $grantType = 'urn:ietf:params:oauth:grant-type:device_code' #'client_credentials', #'authorization_code'
-    $scope = 'user.read openid profile Application.ReadWrite.All User.ReadWrite.All Directory.ReadWrite.All Directory.Read.All Domain.Read.All'
+    $scope = 'user.read openid profile Application.ReadWrite.All User.ReadWrite.All Directory.ReadWrite.All Directory.Read.All Domain.Read.All AppRoleAssignment.ReadWrite.All'
     if (!$global:accessToken -or ($global:accessTokenExpiration -lt (get-date)) -or $force) {
         $accessToken = get-restTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -scope $scope
     }

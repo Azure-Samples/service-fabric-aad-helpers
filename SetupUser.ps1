@@ -101,7 +101,7 @@ function main() {
 
     if ($ConfigObj) {
         $WebApplicationId = $ConfigObj.WebAppId
-        $servicePrincipalId = $ConfigObj.NativeClientAppId # $ConfigObj.ServicePrincipalId
+        $servicePrincipalId = $ConfigObj.ServicePrincipalId
     }
 
     # get verified domain
@@ -119,9 +119,10 @@ function main() {
     # set user name
     $userName = set-userName
 
-    # create user
+    # check / create user
     $newUser = create-user -userName $userName -domain $domain -appRoles $appRoles
     assert-notNull $newUser 'unable to create new user $userName'
+    write-host "user $userName created successfully"
     return $newUser
 }
 
@@ -164,6 +165,7 @@ function get-servicePrincipalId() {
         $servicePrincipalId = (call-graphApi -uri $uri -method 'get').value.id #objectId
     }
 
+    write-host "returning servicePrincipalId:$servicePrincipalId"
     return $servicePrincipalId
 }
 
@@ -171,6 +173,7 @@ function get-appRoles() {
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"appId:$WebApplicationId`"")
     $appRoles = (call-graphApi -uri $uri -method 'get').value.appRoles
     
+    write-host "returning appRoles:$($appRoles | convertto-json)"
     return $appRoles
 }
 
@@ -181,7 +184,7 @@ function get-roleId($appRoles) {
     }
 
     $roleId = ($appRoles | Where-Object value -eq $appRoleType | Select-Object id).id
-    write-verbose "roleId: $roleId"
+    write-host "roleId: $roleId"
     return  $roleId
 }
 
@@ -202,13 +205,13 @@ function get-user($UserPrincipalName) {
     #$uri = [string]::Format($graphAPIFormat, "users", [string]::Format('&$filter=displayName eq ''{0}''', $UserName))
     $uri = [string]::Format($graphAPIFormat, "users?`$search=`"userPrincipalName:$userPrincipalName`"")
     $user = (call-graphApi -uri $uri -method 'get')
-    write-verbose "user: $($user | convertto-json -depth 2)"
+    write-host "user: $($user | convertto-json -depth 2)"
     return $user
 }
 
 function create-user($userName, $domain, $appRoles) {
     #Create User
-    $userPrincipalName = [string]::Format("{0}@{1}", $UserName, $domain)
+    $userPrincipalName = "$userName@$domain"
     $roleId = get-roleId -appRoles $appRoles
     $userId = (get-user -UserPrincipalName $userPrincipalName).value.id #.objectId
 
@@ -239,24 +242,42 @@ function create-user($userName, $domain, $appRoles) {
         }
     }
     
-    write-host "role id: $roleId"
-    $roles = create-userRole -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId
-    return $roles
+    write-host "user id: $userId"
+    $currentAppRoleAssignment = get-RoleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId
+    
+    if (!$currentAppRoleAssignment) {
+        $currentAppRoleAssignment = add-RoleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId
+    }
+
+    return $currentAppRoleAssignment
 }
 
-function create-userRole($userId, $roleId, $servicePrincipalId) {
+function add-RoleAssignment($userId, $roleId, $servicePrincipalId) {
     #User Role
-    $uri = [string]::Format($graphAPIFormat, "users/$userId/appRoleAssignments")
+    #$uri = [string]::Format($graphAPIFormat, "servicePrincipals/$userId/appRoleAssignments")
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$servicePrincipalId/appRoleAssignedTo")
     $appRoleAssignments = @{
-        id            = $roleId
-        principalId   = $userId
-        principalType = "User"
-        resourceId    = $servicePrincipalId
+        appRoleId   = $roleId
+        principalId = $userId
+        #principalType = "User"
+        resourceId  = $servicePrincipalId
     }
 
     $results = call-graphApi -uri $uri -body $appRoleAssignments
     write-host "create role results: $($results | convertto-json -Depth 2)"
     return $results
+}
+
+function get-RoleAssignment($userId, $roleId, $servicePrincipalId) {
+    #User Role
+    #$uri = [string]::Format($graphAPIFormat, "servicePrincipals/$userId/appRoleAssignments")
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$servicePrincipalId/appRoleAssignedTo")
+    $results = call-graphApi -uri $uri -method 'get'
+    write-host "current available assignments from $servicePrincipalId : $($results | convertto-json -depth 5)"
+    $appRoles = @($results.value)
+    $appRoleAssignment = $appRoles | Where-Object { ($psitem.appRoleId -ieq $roleId) -and ($psitem.principalId -ieq $userId) }
+    write-host "current app role assignment:$appRoleAssignment"
+    return $appRoleAssignment
 }
 
 main
