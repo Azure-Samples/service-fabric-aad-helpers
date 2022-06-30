@@ -244,10 +244,12 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
             enableIdTokenIssuance     = $true
         }
     }
+    
     if ($AddResourceAccess) {
         $webApp = @{
             displayName            = $WebApplicationName
             signInAudience         = $signInAudience
+            #isFallbackPublicClient      = $true
             identifierUris         = @($WebApplicationUri)
             defaultRedirectUri     = $WebApplicationReplyUrl
             appRoles               = $appRole
@@ -259,6 +261,7 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
         $webApp = @{
             displayName        = $WebApplicationName
             signInAudience     = $signInAudience
+            #isFallbackPublicClient      = $true
             identifierUris     = @($WebApplicationUri)
             defaultRedirectUri = $WebApplicationReplyUrl
             appRoles           = $appRole
@@ -289,6 +292,7 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
         publicClient           = @{ redirectUris = @("urn:ietf:wg:oauth:2.0:oob") }
         displayName            = $NativeClientApplicationName
         signInAudience         = $signInAudience
+        isFallbackPublicClient      = $true
         requiredResourceAccess = $nativeAppResourceAccess
     }
 
