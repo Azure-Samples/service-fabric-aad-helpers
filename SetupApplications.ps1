@@ -140,14 +140,18 @@ function main () {
 
     # cleanup
     if ($remove) {
-        write-host "removing service principals"
-        $result = remove-servicePrincipals
+        write-host "removing web service principals"
+        $result = remove-servicePrincipal
     
+        write-host "removing web service principals"
+        $result = $result -and (remove-servicePrincipalNa)
+
         write-warning "removing app registration"
         $result = $result -and (remove-appRegistration -WebApplicationUri $WebApplicationUri)
 
         write-warning "removing native app registration"
         $result = $result -and (remove-nativeClient -nativeClientApplicationName $NativeClientApplicationName)
+        write-host "removal complete" -ForegroundColor Green
         return $result
     }
     
@@ -489,14 +493,15 @@ function remove-appRegistration($WebApplicationUri) {
     $webApp = (call-graphApi -uri $uri -method 'delete')
     if ($webApp) {
         while ((call-graphApi -uri $uri -method 'get')) {
-            write-host "waiting for web client delete to complete..."
+            write-host "waiting for web client delete to complete..." -ForegroundColor Magenta
             start-sleep -seconds $sleepSeconds
         }
-        else {
-            return $true
-        }
-        return $false
+        
     }
+    else {
+        return $true
+    }
+    return $false
 }
 
 function remove-nativeClient($NativeClientApplicationName) {
@@ -504,25 +509,26 @@ function remove-nativeClient($NativeClientApplicationName) {
     $nativeApp = get-nativeClient -nativeClientApplicationName $NativeClientApplicationName
     if (!$nativeApp) {
         return $true
-    } 
+    }
 
     $uri = [string]::Format($graphAPIFormat, "applications/$($nativeApp.id)")
     $nativeApp = (call-graphApi -uri $uri -method 'delete')
     if ($nativeApp) {
         while ((call-graphApi -uri $uri -method 'get')) {
-            write-host "waiting for native client delete to complete..."
+            write-host "waiting for native client delete to complete..." -ForegroundColor Magenta
             start-sleep -seconds $sleepSeconds
         }
-        else {
-            return $true
-        }
-        return $false
     }
+    else {
+        return $true
+    }
+    return $false
 }
 
-function remove-servicePrincipals() {
+function remove-servicePrincipal() {
     $result = $true
     $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri
+
     if ($webApp) {
         $servicePrincipal = get-servicePrincipal -webApp $webApp
         if ($servicePrincipal) {
@@ -530,22 +536,28 @@ function remove-servicePrincipals() {
             $result = $result -and (call-graphApi -uri $uri -method 'delete')
             if ($result) {
                 while ((get-servicePrincipal -webApp $webApp)) {
-                    write-host "waiting for spn delete to complete..."
+                    write-host "waiting for web spn delete to complete..." -ForegroundColor Magenta
                     start-sleep -seconds $sleepSeconds
                 }
             }
         }
     }
-    
+
+    return $result
+}
+
+function remove-servicePrincipalNa() {
+    $result = $true    
     $nativeApp = get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri
+
     if ($nativeApp) {
         $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp
         if ($servicePrincipalNa) {
             $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipalNa.id)")
-            $result = $result -and (call-graphApi -uri $uri -method 'delete')
+            $result = call-graphApi -uri $uri -method 'delete'
             if ($result) {
                 while ((get-servicePrincipal -webApp $nativeApp)) {
-                    write-host "waiting for spn delete to complete..."
+                    write-host "waiting for native spn delete to complete..." -ForegroundColor Magenta
                     start-sleep -seconds $sleepSeconds
                 }
             }
