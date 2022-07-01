@@ -109,6 +109,7 @@ $headers = $null
 . "$PSScriptRoot\Common.ps1"
 $graphAPIFormat = $resourceUrl + "/v1.0/" + $TenantId + "/{0}"
 $global:ConfigObj = @{}
+$sleepSeconds = 5
 
 function main () {
     Write-Host 'TenantId = ' $TenantId
@@ -128,6 +129,7 @@ function main () {
         $NativeClientApplicationName = "ServiceFabricClusterNativeClient"
     }
 
+    # AAD access
     $requiredResourceAccess = @(@{
             resourceAppId  = "00000002-0000-0000-c000-000000000000"
             resourceAccess = @(@{
@@ -143,10 +145,9 @@ function main () {
     
         write-warning "removing app registration"
         $result = $result -and (remove-appRegistration -WebApplicationUri $WebApplicationUri)
-    
+
         write-warning "removing native app registration"
         $result = $result -and (remove-nativeClient -nativeClientApplicationName $NativeClientApplicationName)
-            
         return $result
     }
     
@@ -165,7 +166,7 @@ function main () {
     # check / add oauth user_impersonation permissions
     $oauthPermissionsId = get-OauthPermissions -webApp $webApp
     if (!$oauthPermissionsId) {
-        $oauthPermissionsId = add-OauthPermissions -webApp $webApp -WebApplicationName $WebApplicationName
+        $oauthPermissionsId = add-oauthPermissions -webApp $webApp -WebApplicationName $WebApplicationName
     }
     assert-notNull $oauthPermissionsId 'Web Application Oauth permissions Failed'
     Write-Host "Web Application Oauth permissions created: $($oauthPermissionsId|convertto-json)"  -ForegroundColor Green
@@ -270,6 +271,12 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
     }
 
     $webApp = call-graphApi -uri $uri -body $webApp
+    if ($webApp) {
+        while (!(get-appRegistration -WebApplicationUri $WebApplicationUri)) {
+            write-host "waiting on app registration completion"
+            start-sleep -seconds $sleepSeconds
+        }
+    }
     return $webApp
 }
 
@@ -289,7 +296,9 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
     }
 
     $nativeAppResource = @{
-        publicClient           = @{ redirectUris = @("urn:ietf:wg:oauth:2.0:oob") }
+        publicClient           = @{
+            redirectUris = @("urn:ietf:wg:oauth:2.0:oob") 
+        }
         displayName            = $NativeClientApplicationName
         signInAudience         = $signInAudience
         isFallbackPublicClient = $true
@@ -297,10 +306,17 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
     }
 
     $nativeApp = call-graphApi -uri $uri -body $nativeAppResource
+    if ($nativeApp) {
+        while (!(get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri)) {
+            write-host "waiting on native app registration completion"
+            start-sleep -seconds $sleepSeconds
+        }
+    }
+
     return $nativeApp
 }
 
-function add-OauthPermissions($webApp, $WebApplicationName) {
+function add-oauthPermissions($webApp, $WebApplicationName) {
     write-host "adding user_impersonation scope"
     $patchApplicationUri = $graphAPIFormat -f ("applications/{0}" -f $webApp.Id)
     $webApp.api.oauth2PermissionScopes = @($webApp.api.oauth2PermissionScopes)
@@ -340,6 +356,13 @@ function add-servicePrincipal($webApp) {
     }
 
     $servicePrincipal = call-graphApi -uri $uri -body $servicePrincipal
+    if ($servicePrincipal) {
+        while (!(get-servicePrincipal -webApp $webApp)) {
+            write-host "waiting on service principal creation completion"
+            start-sleep -seconds $sleepSeconds
+        }
+    }
+
     return $servicePrincipal
 }
 
@@ -435,7 +458,6 @@ function get-oauthPermissionGrants($clientId) {
 function get-servicePrincipal($webApp) {
     # check for existing app by identifieruri
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals?`$search=`"appId:$($webApp.appId)`"")
-   
     $servicePrincipal = (call-graphApi -uri $uri -method 'get').value
     write-host "servicePrincipal:$servicePrincipal"
 
@@ -465,16 +487,16 @@ function remove-appRegistration($WebApplicationUri) {
 
     $uri = [string]::Format($graphAPIFormat, "applications/$($webApp.id)")
     $webApp = (call-graphApi -uri $uri -method 'delete')
-
-    while ($webApp -and (call-graphApi -uri $uri -method 'delete')) {
-        write-host "waiting for web client delete to complete..."
-        start-sleep -seconds 1
+    if ($webApp) {
+        while ((call-graphApi -uri $uri -method 'get')) {
+            write-host "waiting for web client delete to complete..."
+            start-sleep -seconds $sleepSeconds
+        }
+        else {
+            return $true
+        }
+        return $false
     }
-
-    if (!$webApp) {
-        return $true
-    }
-    return $false
 }
 
 function remove-nativeClient($NativeClientApplicationName) {
@@ -486,16 +508,16 @@ function remove-nativeClient($NativeClientApplicationName) {
 
     $uri = [string]::Format($graphAPIFormat, "applications/$($nativeApp.id)")
     $nativeApp = (call-graphApi -uri $uri -method 'delete')
-    
-    while ($nativeApp -and (call-graphApi -uri $uri -method 'delete')) {
-        write-host "waiting for native client delete to complete..."
-        start-sleep -seconds 1
+    if ($nativeApp) {
+        while ((call-graphApi -uri $uri -method 'get')) {
+            write-host "waiting for native client delete to complete..."
+            start-sleep -seconds $sleepSeconds
+        }
+        else {
+            return $true
+        }
+        return $false
     }
-
-    if (!$nativeApp) {
-        return $true
-    }
-    return $false
 }
 
 function remove-servicePrincipals() {
@@ -509,7 +531,7 @@ function remove-servicePrincipals() {
             if ($result) {
                 while ((get-servicePrincipal -webApp $webApp)) {
                     write-host "waiting for spn delete to complete..."
-                    start-sleep -seconds 1
+                    start-sleep -seconds $sleepSeconds
                 }
             }
         }
@@ -524,7 +546,7 @@ function remove-servicePrincipals() {
             if ($result) {
                 while ((get-servicePrincipal -webApp $nativeApp)) {
                     write-host "waiting for spn delete to complete..."
-                    start-sleep -seconds 1
+                    start-sleep -seconds $sleepSeconds
                 }
             }
         }    
