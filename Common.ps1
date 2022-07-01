@@ -27,32 +27,39 @@ function call-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $met
         $error.clear()
         $json = $body | ConvertTo-Json -Depth 99 -Compress
         $logHeaders = $headers.clone()
-        $logHeaders.Authorization = $logHeaders.Authorization.substring(0,30) + '...'
+        $logHeaders.Authorization = $logHeaders.Authorization.substring(0, 30) + '...'
         write-host "Invoke-WebRequest $uri -method $method -headers $($logHeaders | convertto-json) -body $($body | convertto-json -depth 99)" -ForegroundColor Green
+       
         $result = Invoke-WebRequest $uri -Method $method -Headers $headers -Body $json
-        $resultObj =  $result.Content | convertfrom-json
+        $resultObj = $result.Content | convertfrom-json
         $resultJson = $resultObj | convertto-json -depth 99
         write-host "Invoke-WebRequest result:$resultJson" -ForegroundColor cyan
-        if($result.StatusCode -ne 200){
-            switch($result.StatusCode){
+       
+        if ($result.StatusCode -ne 200) {
+            switch ($result.StatusCode) {
                 201 {
-                    if($method -ieq 'post'){
+                    if ($method -ieq 'post') {
                         # created
                         return $resultObj
                     }
-                }
-                204 {
-                    if($method -ieq 'patch'){
-                        # successful patch
-                        return $resultObj
-                    }
+
                     return $null
                 }
-                default:{
+                204 {
+                    if ($method -ieq 'patch' -or $method -ieq 'delete') {
+                        write-host "$method successful." -ForegroundColor Green
+                        # successful patch or delete
+                        return $result
+                    }
+
+                    return $null
+                }
+                default: {
                     write-warning "unhandled status code:$($result.StatusCode) $($result.StatusDescription)"
                 }
             }
         }
+
         return $resultObj
     }
     catch [System.Exception] {
@@ -78,8 +85,8 @@ function get-RESTHeaders() {
     }
     
     $authHeader = @{
-        'Content-Type'  = 'application/json'
-        'Authorization' = 'Bearer ' + $token
+        'Content-Type'     = 'application/json'
+        'Authorization'    = 'Bearer ' + $token
         'ConsistencyLevel' = 'eventual'
     }
 

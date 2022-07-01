@@ -292,7 +292,7 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
         publicClient           = @{ redirectUris = @("urn:ietf:wg:oauth:2.0:oob") }
         displayName            = $NativeClientApplicationName
         signInAudience         = $signInAudience
-        isFallbackPublicClient      = $true
+        isFallbackPublicClient = $true
         requiredResourceAccess = $nativeAppResourceAccess
     }
 
@@ -327,6 +327,20 @@ function add-OauthPermissions($webApp, $WebApplicationName) {
     }
 
     return $null
+}
+
+function add-servicePrincipal($webApp) {
+    #Service Principal
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals")
+    $servicePrincipal = @{
+        accountEnabled            = $false
+        appId                     = $webApp.appId
+        displayName               = $webApp.displayName
+        appRoleAssignmentRequired = $true
+    }
+
+    $servicePrincipal = call-graphApi -uri $uri -body $servicePrincipal
+    return $servicePrincipal
 }
 
 function add-servicePrincipalGrants($servicePrincipalNa, $servicePrincipal) {
@@ -364,20 +378,6 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
     $result = call-graphApi -uri $uri -body $oauth2PermissionGrants
     assert-notNull $result "aad app service principal oauth permissions $scope configuration failed"
     return $result
-}
-
-function add-servicePrincipal($webApp) {
-    #Service Principal
-    $uri = [string]::Format($graphAPIFormat, "servicePrincipals")
-    $servicePrincipal = @{
-        accountEnabled            = $false
-        appId                     = $webApp.appId
-        displayName               = $webApp.displayName
-        appRoleAssignmentRequired = $true
-    }
-
-    $servicePrincipal = call-graphApi -uri $uri -body $servicePrincipal
-    return $servicePrincipal
 }
 
 function get-appRegistration($WebApplicationUri) {
@@ -457,7 +457,7 @@ function get-servicePrincipalAAD() {
 }
 
 function remove-appRegistration($WebApplicationUri) {
-    # remove app registration
+    # remove web app registration
     $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri
     if (!$webApp) {
         return $true
@@ -466,6 +466,11 @@ function remove-appRegistration($WebApplicationUri) {
     $uri = [string]::Format($graphAPIFormat, "applications/$($webApp.id)")
     $webApp = (call-graphApi -uri $uri -method 'delete')
 
+    while ($webApp -and (call-graphApi -uri $uri -method 'delete')) {
+        write-host "waiting for web client delete to complete..."
+        start-sleep -seconds 1
+    }
+
     if (!$webApp) {
         return $true
     }
@@ -473,7 +478,7 @@ function remove-appRegistration($WebApplicationUri) {
 }
 
 function remove-nativeClient($NativeClientApplicationName) {
-    # remove app registration
+    # remove native app registration
     $nativeApp = get-nativeClient -nativeClientApplicationName $NativeClientApplicationName
     if (!$nativeApp) {
         return $true
@@ -481,6 +486,11 @@ function remove-nativeClient($NativeClientApplicationName) {
 
     $uri = [string]::Format($graphAPIFormat, "applications/$($nativeApp.id)")
     $nativeApp = (call-graphApi -uri $uri -method 'delete')
+    
+    while ($nativeApp -and (call-graphApi -uri $uri -method 'delete')) {
+        write-host "waiting for native client delete to complete..."
+        start-sleep -seconds 1
+    }
 
     if (!$nativeApp) {
         return $true
@@ -496,6 +506,12 @@ function remove-servicePrincipals() {
         if ($servicePrincipal) {
             $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipal.id)")
             $result = $result -and (call-graphApi -uri $uri -method 'delete')
+            if ($result) {
+                while ((get-servicePrincipal -webApp $webApp)) {
+                    write-host "waiting for spn delete to complete..."
+                    start-sleep -seconds 1
+                }
+            }
         }
     }
     
@@ -505,6 +521,12 @@ function remove-servicePrincipals() {
         if ($servicePrincipalNa) {
             $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipalNa.id)")
             $result = $result -and (call-graphApi -uri $uri -method 'delete')
+            if ($result) {
+                while ((get-servicePrincipal -webApp $nativeApp)) {
+                    write-host "waiting for spn delete to complete..."
+                    start-sleep -seconds 1
+                }
+            }
         }    
     }
 
