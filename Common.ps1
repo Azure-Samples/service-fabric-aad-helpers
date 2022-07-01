@@ -1,6 +1,6 @@
 ﻿<#
 .VERSION
-1.0.4
+2.0.0
 
 .SYNOPSIS
 Common script, do not call it directly.
@@ -28,12 +28,12 @@ function call-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $met
         $json = $body | ConvertTo-Json -Depth 99 -Compress
         $logHeaders = $headers.clone()
         $logHeaders.Authorization = $logHeaders.Authorization.substring(0, 30) + '...'
-        write-host "Invoke-WebRequest $uri -method $method -headers $($logHeaders | convertto-json) -body $($body | convertto-json -depth 99)" -ForegroundColor Green
+        write-host "Invoke-WebRequest $uri`r`n`t-method $method`r`n`t-headers $($logHeaders | convertto-json)`r`n`t-body $($body | convertto-json -depth 99)" -ForegroundColor Green
        
         $result = Invoke-WebRequest $uri -Method $method -Headers $headers -Body $json
         $resultObj = $result.Content | convertfrom-json
         $resultJson = $resultObj | convertto-json -depth 99
-        write-host "Invoke-WebRequest result:$resultJson" -ForegroundColor cyan
+        write-host "Invoke-WebRequest result:`r`n`t$resultJson" -ForegroundColor cyan
        
         if ($result.StatusCode -ne 200) {
             switch ($result.StatusCode) {
@@ -121,15 +121,6 @@ function get-RESTHeaders() {
 
     write-host "auth header: $($authHeader | convertto-json)"
     return $authHeader
-}
-
-function get-RESTHeadersADAL() {
-    $authenticationContext = [Microsoft.IdentityModel.Clients.ActiveDirectory.AuthenticationContext]::new($authString, $false)
-    $promptBehavior = [Microsoft.IdentityModel.Clients.ActiveDirectory.PromptBehavior]::RefreshSession
-    $platformParameters = [Microsoft.IdentityModel.Clients.ActiveDirectory.PlatformParameters]::new($promptBehavior)
-
-    $accessToken = $authenticationContext.AcquireTokenAsync($resourceUrl, $clientId, $redirectUrl, $platformParameters).Result.AccessToken
-    return $accessToken
 }
 
 function get-RESTHeadersCloud() { 

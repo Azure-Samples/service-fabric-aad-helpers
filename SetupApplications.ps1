@@ -1,6 +1,6 @@
 ﻿<#
 .VERSION
-1.0.4
+2.0.0
 
 .SYNOPSIS
 Setup applications in a Service Fabric cluster Azure Active Directory tenant.
@@ -101,8 +101,8 @@ Param
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
-    [Switch]$remove
-
+    [Switch]
+    $remove
 )
 
 $headers = $null
@@ -151,8 +151,8 @@ function main () {
 
         write-warning "removing native app registration"
         $result = $result -and (remove-nativeClient -nativeClientApplicationName $NativeClientApplicationName)
-        write-host "removal complete" -ForegroundColor Green
-        return $result
+        write-host "removal complete result:$result" -ForegroundColor Green
+        return $configObj
     }
     
     # check / add app registration
@@ -277,7 +277,7 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
     $webApp = call-graphApi -uri $uri -body $webApp
     if ($webApp) {
         while (!(get-appRegistration -WebApplicationUri $WebApplicationUri)) {
-            write-host "waiting on app registration completion"
+            write-host "waiting for app registration completion" -ForegroundColor Magenta
             start-sleep -seconds $sleepSeconds
         }
     }
@@ -312,7 +312,7 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
     $nativeApp = call-graphApi -uri $uri -body $nativeAppResource
     if ($nativeApp) {
         while (!(get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri)) {
-            write-host "waiting on native app registration completion"
+            write-host "waiting for native app registration completion" -ForegroundColor Magenta
             start-sleep -seconds $sleepSeconds
         }
     }
@@ -362,7 +362,7 @@ function add-servicePrincipal($webApp) {
     $servicePrincipal = call-graphApi -uri $uri -body $servicePrincipal
     if ($servicePrincipal) {
         while (!(get-servicePrincipal -webApp $webApp)) {
-            write-host "waiting on service principal creation completion"
+            write-host "waiting for service principal creation completion" -ForegroundColor Magenta
             start-sleep -seconds $sleepSeconds
         }
     }
@@ -489,19 +489,18 @@ function remove-appRegistration($WebApplicationUri) {
         return $true
     } 
 
+    $configObj.WebAppId = $webApp.appId
     $uri = [string]::Format($graphAPIFormat, "applications/$($webApp.id)")
     $webApp = (call-graphApi -uri $uri -method 'delete')
+
     if ($webApp) {
         while ((call-graphApi -uri $uri -method 'get')) {
             write-host "waiting for web client delete to complete..." -ForegroundColor Magenta
             start-sleep -seconds $sleepSeconds
         }
-        
     }
-    else {
-        return $true
-    }
-    return $false
+
+    return $true
 }
 
 function remove-nativeClient($NativeClientApplicationName) {
@@ -513,16 +512,17 @@ function remove-nativeClient($NativeClientApplicationName) {
 
     $uri = [string]::Format($graphAPIFormat, "applications/$($nativeApp.id)")
     $nativeApp = (call-graphApi -uri $uri -method 'delete')
+
     if ($nativeApp) {
+        $configObj.NativeClientAppId = $nativeApp.appId
+
         while ((call-graphApi -uri $uri -method 'get')) {
             write-host "waiting for native client delete to complete..." -ForegroundColor Magenta
             start-sleep -seconds $sleepSeconds
         }
     }
-    else {
-        return $true
-    }
-    return $false
+
+    return $true
 }
 
 function remove-servicePrincipal() {
@@ -532,8 +532,10 @@ function remove-servicePrincipal() {
     if ($webApp) {
         $servicePrincipal = get-servicePrincipal -webApp $webApp
         if ($servicePrincipal) {
+            $configObj.ServicePrincipalId = $servicePrincipal.Id
             $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipal.id)")
             $result = $result -and (call-graphApi -uri $uri -method 'delete')
+
             if ($result) {
                 while ((get-servicePrincipal -webApp $webApp)) {
                     write-host "waiting for web spn delete to complete..." -ForegroundColor Magenta

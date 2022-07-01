@@ -1,6 +1,6 @@
 ﻿<#
 .VERSION
-1.0.3
+2.0.0
 
 .SYNOPSIS
 Setup user in a Service Fabric cluster Azure Active Directory tenant.
@@ -82,7 +82,12 @@ Param
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
     [String]
-    $Domain
+    $Domain,
+
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
+    [Switch]
+    $remove
 )
 
 if ($ConfigObj) {
@@ -92,9 +97,9 @@ if ($ConfigObj) {
 $headers = $null
 . "$PSScriptRoot\Common.ps1"
 $graphAPIFormat = $resourceUrl + "/v1.0/" + $TenantId + "/{0}"
-#$graphAPIFormat = $resourceUrl + "/beta/" + $TenantId + "/{0}"
 $servicePrincipalId = $null
 $WebApplicationId = $null
+$sleepSeconds = 5
 
 function main() {
     Write-Host 'TenantId = ' $TenantId
@@ -119,11 +124,99 @@ function main() {
     # set user name
     $userName = set-userName
 
+    # cleanup
+    if ($remove) {
+        write-warning "removing user $servicePrincipalId"
+        $result = remove-user -userPrincipalName $servicePrincipalId
+        write-host "removal complete" -ForegroundColor Green
+        return $result
+    }
+   
     # check / create user
-    $newUser = create-user -userName $userName -domain $domain -appRoles $appRoles
+    $newUser = add-user -userName $userName -domain $domain -appRoles $appRoles
     assert-notNull $newUser 'unable to create new user $userName'
     write-host "user $userName created successfully"
     return $newUser
+}
+
+function add-roleAssignment($userId, $roleId, $servicePrincipalId) {
+    #add user role assignments
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$servicePrincipalId/appRoleAssignedTo")
+    $appRoleAssignments = @{
+        appRoleId   = $roleId
+        principalId = $userId
+        #principalType = "User"
+        resourceId  = $servicePrincipalId
+    }
+
+    $results = call-graphApi -uri $uri -body $appRoleAssignments
+    write-host "create role results: $($results | convertto-json -Depth 2)"
+    return $results
+}
+
+function add-user($userName, $domain, $appRoles) {
+    #Create User
+    $userPrincipalName = "$userName@$domain"
+    $roleId = get-roleId -appRoles $appRoles
+    $userId = (get-user -UserPrincipalName $userPrincipalName).value.id #.objectId
+
+    if (!$userId) {
+        $uri = [string]::Format($graphAPIFormat, "users", "")
+        $newUser = @{
+            accountEnabled    = $true
+            displayName       = $UserName
+            passwordProfile   = @{
+                password = $Password
+            }
+            mailNickname      = $UserName
+            userPrincipalName = $userPrincipalName
+        }
+        #Admin
+        if ($IsAdmin) {
+            Write-Host 'Creating Admin User: Name = ' $UserName 'Password = ' $Password
+            $userId = (call-graphApi -uri $uri -body $newUser).value.id #.objectId
+            assert-notNull $userId 'Admin User Creation Failed'
+            Write-Host 'Admin User Created:' $userId
+        }
+        #Read-Only User
+        else {
+            Write-Host 'Creating Read-Only User: Name = ' $UserName 'Password = ' $Password
+            $userId = (call-graphApi -uri $uri -body $newUser).value.id #.objectId
+            assert-notNull $userId 'Read-Only User Creation Failed'
+            Write-Host 'Read-Only User Created:' $userId
+        }
+    }
+    
+    write-host "user id: $userId"
+    $currentAppRoleAssignment = get-roleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId
+    
+    if (!$currentAppRoleAssignment) {
+        $currentAppRoleAssignment = add-roleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId
+    }
+
+    return $currentAppRoleAssignment
+}
+
+function get-roleAssignment($userId, $roleId, $servicePrincipalId) {
+    #get user role assignments
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$servicePrincipalId/appRoleAssignedTo")
+    
+    $results = call-graphApi -uri $uri -method 'get'
+    write-host "current available assignments from $servicePrincipalId : $($results | convertto-json -depth 5)"
+    
+    $appRoles = @($results.value)
+    $appRoleAssignment = $appRoles | Where-Object { ($psitem.appRoleId -ieq $roleId) -and ($psitem.principalId -ieq $userId) }
+    
+    write-host "current app role assignment:$appRoleAssignment"
+    return $appRoleAssignment
+}
+
+function get-user($UserPrincipalName) {
+    #$uri = [string]::Format($graphAPIFormat, "users", [string]::Format('&$filter=displayName eq ''{0}''', $UserName))
+    $uri = [string]::Format($graphAPIFormat, "users?`$search=`"userPrincipalName:$userPrincipalName`"")
+    $user = (call-graphApi -uri $uri -method 'get')
+    write-host "user: $($user | convertto-json -depth 2)"
+    return $user
 }
 
 function get-verifiedDomain() {
@@ -188,6 +281,27 @@ function get-roleId($appRoles) {
     return  $roleId
 }
 
+function remove-user($userName, $domain, $appRoles) {
+    $userPrincipalName = "$userName@$domain"
+    $userId = (get-user -UserPrincipalName $userPrincipalName).value.id
+    
+    if (!$userId) {
+        return $true
+    }
+
+    $uri = [string]::Format($graphAPIFormat, "users/$userPrincipalName")
+    $result = call-graphApi -uri $uri -method 'delete'
+
+    if ($result) {
+        while ((get-user -UserPrincipalName $userPrincipalName)) {
+            write-host "waiting for user $userPrincipalName delete to complete..." -ForegroundColor Magenta
+            start-sleep -seconds $sleepSeconds
+        }
+    }
+
+    return $result
+}
+
 function set-userName() {
     if (!$UserName) {
         if ($IsAdmin) {
@@ -199,85 +313,6 @@ function set-userName() {
     }
     
     return $UserName
-}
-
-function get-user($UserPrincipalName) {
-    #$uri = [string]::Format($graphAPIFormat, "users", [string]::Format('&$filter=displayName eq ''{0}''', $UserName))
-    $uri = [string]::Format($graphAPIFormat, "users?`$search=`"userPrincipalName:$userPrincipalName`"")
-    $user = (call-graphApi -uri $uri -method 'get')
-    write-host "user: $($user | convertto-json -depth 2)"
-    return $user
-}
-
-function create-user($userName, $domain, $appRoles) {
-    #Create User
-    $userPrincipalName = "$userName@$domain"
-    $roleId = get-roleId -appRoles $appRoles
-    $userId = (get-user -UserPrincipalName $userPrincipalName).value.id #.objectId
-
-    if (!$userId) {
-        $uri = [string]::Format($graphAPIFormat, "users", "")
-        $newUser = @{
-            accountEnabled    = $true
-            displayName       = $UserName
-            passwordProfile   = @{
-                password = $Password
-            }
-            mailNickname      = $UserName
-            userPrincipalName = $userPrincipalName
-        }
-        #Admin
-        if ($IsAdmin) {
-            Write-Host 'Creating Admin User: Name = ' $UserName 'Password = ' $Password
-            $userId = (call-graphApi -uri $uri -body $newUser).value.id #.objectId
-            assert-notNull $userId 'Admin User Creation Failed'
-            Write-Host 'Admin User Created:' $userId
-        }
-        #Read-Only User
-        else {
-            Write-Host 'Creating Read-Only User: Name = ' $UserName 'Password = ' $Password
-            $userId = (call-graphApi -uri $uri -body $newUser).value.id #.objectId
-            assert-notNull $userId 'Read-Only User Creation Failed'
-            Write-Host 'Read-Only User Created:' $userId
-        }
-    }
-    
-    write-host "user id: $userId"
-    $currentAppRoleAssignment = get-RoleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId
-    
-    if (!$currentAppRoleAssignment) {
-        $currentAppRoleAssignment = add-RoleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId
-    }
-
-    return $currentAppRoleAssignment
-}
-
-function add-RoleAssignment($userId, $roleId, $servicePrincipalId) {
-    #User Role
-    #$uri = [string]::Format($graphAPIFormat, "servicePrincipals/$userId/appRoleAssignments")
-    $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$servicePrincipalId/appRoleAssignedTo")
-    $appRoleAssignments = @{
-        appRoleId   = $roleId
-        principalId = $userId
-        #principalType = "User"
-        resourceId  = $servicePrincipalId
-    }
-
-    $results = call-graphApi -uri $uri -body $appRoleAssignments
-    write-host "create role results: $($results | convertto-json -Depth 2)"
-    return $results
-}
-
-function get-RoleAssignment($userId, $roleId, $servicePrincipalId) {
-    #User Role
-    #$uri = [string]::Format($graphAPIFormat, "servicePrincipals/$userId/appRoleAssignments")
-    $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$servicePrincipalId/appRoleAssignedTo")
-    $results = call-graphApi -uri $uri -method 'get'
-    write-host "current available assignments from $servicePrincipalId : $($results | convertto-json -depth 5)"
-    $appRoles = @($results.value)
-    $appRoleAssignment = $appRoles | Where-Object { ($psitem.appRoleId -ieq $roleId) -and ($psitem.principalId -ieq $userId) }
-    write-host "current app role assignment:$appRoleAssignment"
-    return $appRoleAssignment
 }
 
 main
