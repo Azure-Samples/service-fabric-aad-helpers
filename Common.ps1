@@ -74,6 +74,35 @@ function get-cloudInstance() {
     return $isCloudInstance
 }
 
+function get-restAuthGraph($tenantId, $clientId, $scope, $uri) {
+    # requires app registration api permissions with 'devops' added
+    # so cannot use internally
+    write-host "auth request" -ForegroundColor Green
+    $error.clear()
+    $uri = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/devicecode"
+
+    $Body = @{
+        'client_id' = $clientId
+        'scope'     = $scope
+    }
+
+    $params = @{
+        ContentType = 'application/x-www-form-urlencoded'
+        Body        = $Body
+        Method      = 'post'
+        URI         = $uri
+    }
+    
+    Write-Verbose ($params | convertto-json)
+    $error.Clear()
+    write-host "invoke-restMethod $uri" -ForegroundColor Cyan
+    $global:authresult = Invoke-RestMethod @params -Verbose -Debug
+    write-host "auth result: $($global:authresult | convertto-json)"
+    write-host "rest auth finished"
+
+    return $global:authresult
+}
+
 function get-RESTHeaders() {
     $redirectUrl = "urn:ietf:wg:oauth:2.0:oob"
 
@@ -115,33 +144,15 @@ function get-RESTHeadersCloud() {
     return $token
 }
 
-function get-restAuthGraph($tenantId, $clientId, $scope, $uri) {
-    # requires app registration api permissions with 'devops' added
-    # so cannot use internally
-    write-host "auth request" -ForegroundColor Green
-    $error.clear()
-    $uri = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/devicecode"
-
-    $Body = @{
-        'client_id' = $clientId
-        'scope'     = $scope
+function get-RESTHeadersGraph($tenantId) {
+    # Use common client 
+    $clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e' # well-known ps graph client id generated on connect
+    $grantType = 'urn:ietf:params:oauth:grant-type:device_code' #'client_credentials', #'authorization_code'
+    $scope = 'user.read openid profile Application.ReadWrite.All User.ReadWrite.All Directory.ReadWrite.All Directory.Read.All Domain.Read.All AppRoleAssignment.ReadWrite.All'
+    if (!$global:accessToken -or ($global:accessTokenExpiration -lt (get-date)) -or $force) {
+        $accessToken = get-restTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -scope $scope
     }
-
-    $params = @{
-        ContentType = 'application/x-www-form-urlencoded'
-        Body        = $Body
-        Method      = 'post'
-        URI         = $uri
-    }
-    
-    Write-Verbose ($params | convertto-json)
-    $error.Clear()
-    write-host "invoke-restMethod $uri" -ForegroundColor Cyan
-    $global:authresult = Invoke-RestMethod @params -Verbose -Debug
-    write-host "auth result: $($global:authresult | convertto-json)"
-    write-host "rest auth finished"
-
-    return $global:authresult
+    return $accessToken
 }
 
 function get-restTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $scope) {
@@ -225,16 +236,6 @@ function get-restTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $sc
     return $global:accessToken
 }
 
-function get-RESTHeadersGraph($tenantId) {
-    # Use common client 
-    $clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e' # well-known ps graph client id generated on connect
-    $grantType = 'urn:ietf:params:oauth:grant-type:device_code' #'client_credentials', #'authorization_code'
-    $scope = 'user.read openid profile Application.ReadWrite.All User.ReadWrite.All Directory.ReadWrite.All Directory.Read.All Domain.Read.All AppRoleAssignment.ReadWrite.All'
-    if (!$global:accessToken -or ($global:accessTokenExpiration -lt (get-date)) -or $force) {
-        $accessToken = get-restTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -scope $scope
-    }
-    return $accessToken
-}
 
 # Regional settings
 switch ($Location) {
