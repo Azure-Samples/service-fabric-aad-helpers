@@ -15,45 +15,45 @@ v 1.1
 #>
 
 param(
-    [Parameter(ParameterSetName='customobj',Mandatory = $true)]
+    [Parameter(ParameterSetName = 'customobj', Mandatory = $true)]
     [hashtable]$configObj = @{},
 
-    [Parameter(ParameterSetName='values',Mandatory = $true)]
+    [Parameter(ParameterSetName = 'values', Mandatory = $true)]
     [string]$tenantId = '', # guid
     
-    [Parameter(ParameterSetName='values',Mandatory = $true)]
+    [Parameter(ParameterSetName = 'values', Mandatory = $true)]
     [string]$clusterApplication = '', # guid
     
-    [Parameter(ParameterSetName='values',Mandatory = $true)]
+    [Parameter(ParameterSetName = 'values', Mandatory = $true)]
     [string]$clientApplication = '', # guid
     
-    [Parameter(ParameterSetName='values',Mandatory = $true)]
-    [Parameter(ParameterSetName='customobj',Mandatory = $true)]
+    [Parameter(ParameterSetName = 'values', Mandatory = $true)]
+    [Parameter(ParameterSetName = 'customobj', Mandatory = $true)]
     [string]$resourceGroupName = '',
     
-    [Parameter(ParameterSetName='values',Mandatory = $true)]
+    [Parameter(ParameterSetName = 'values', Mandatory = $true)]
     [string]$clusterName = '',
 
-    [Parameter(ParameterSetName='values')]
-    [Parameter(ParameterSetName='customobj')]
+    [Parameter(ParameterSetName = 'values')]
+    [Parameter(ParameterSetName = 'customobj')]
     [string]$deploymentName = "add-azureactivedirectory-$((get-date).tostring('yy-MM-dd-HH-mm-ss'))",
     
-    [Parameter(ParameterSetName='values')]
-    [Parameter(ParameterSetName='customobj')]
+    [Parameter(ParameterSetName = 'values')]
+    [Parameter(ParameterSetName = 'customobj')]
     [string]$templateFile = "$pwd/template-$deploymentName.json",
     
-    [Parameter(ParameterSetName='values')]
-    [Parameter(ParameterSetName='customobj')]
+    [Parameter(ParameterSetName = 'values')]
+    [Parameter(ParameterSetName = 'customobj')]
     [switch]$whatIf,
     
-    [Parameter(ParameterSetName='values')]
-    [Parameter(ParameterSetName='customobj')]
+    [Parameter(ParameterSetName = 'values')]
+    [Parameter(ParameterSetName = 'customobj')]
     [switch]$force
 )
 
 $PSModuleAutoLoadingPreference = 2
 
-if($configObj) {
+if ($configObj) {
     write-host "using configobj"
     $tenantId = $configObj.TenantId
     $clusterApplication = $configObj.WebAppId
@@ -83,12 +83,24 @@ if (!(get-command get-azcontext)) {
     install-module az -Force -AllowClobber
 }
 
-if (!(Get-AzContext)) { Connect-AzAccount }
+if (!(Get-AzContext) -or ((Get-AzContext).Tenant.id -ine $tenantId)) { 
+    if (!(Connect-AzAccount -Tenant $tenantId)) {
+        write-error "authentication error"
+        return
+    }
+}
 
+write-host "`$resources = @(get-azresource -Name $clusterName | Where-Object ResourceType -imatch 'Microsoft.ServiceFabric')"
 $resources = @(get-azresource -Name $clusterName | Where-Object ResourceType -imatch 'Microsoft.ServiceFabric')
 
-if ($resources.Count -ne 1) {
-    write-error "unable to find cluster $(resources)"
+if ($resources.count -ine 1) {
+    if ($resources.Count -lt 1) {
+        write-error "unable to find cluster $clusterName"
+    }
+    else {
+        write-error "multiple clusters found $($resources | Format-List *)"
+    }
+
     return
 }
 
