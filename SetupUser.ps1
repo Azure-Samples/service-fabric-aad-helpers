@@ -174,14 +174,14 @@ function add-user($userName, $domain, $appRoles) {
         #Admin
         if ($IsAdmin) {
             Write-Host 'Creating Admin User: Name = ' $UserName 'Password = ' $Password
-            $userId = (call-graphApi -uri $uri -body $newUser).value.id #.objectId
+            $userId = (call-graphApi -uri $uri -body $newUser).id
             assert-notNull $userId 'Admin User Creation Failed'
             Write-Host 'Admin User Created:' $userId
         }
         #Read-Only User
         else {
             Write-Host 'Creating Read-Only User: Name = ' $UserName 'Password = ' $Password
-            $userId = (call-graphApi -uri $uri -body $newUser).value.id #.objectId
+            $userId = (call-graphApi -uri $uri -body $newUser).id
             assert-notNull $userId 'Read-Only User Creation Failed'
             Write-Host 'Read-Only User Created:' $userId
         }
@@ -283,7 +283,7 @@ function get-roleId($appRoles) {
 
 function remove-user($userName, $domain, $appRoles) {
     $userPrincipalName = "$userName@$domain"
-    $userId = (get-user -UserPrincipalName $userPrincipalName).value.id
+    $userId = (get-user -UserPrincipalName $userPrincipalName).id
     
     if (!$userId) {
         return $true
