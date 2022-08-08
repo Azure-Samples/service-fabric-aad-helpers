@@ -327,7 +327,7 @@ function add-oauthPermissions($webApp, $WebApplicationName) {
     $userImpersonationScopeId = [guid]::NewGuid()
     $webApp.api.oauth2PermissionScopes += @{
         id                      = $userImpersonationScopeId
-        isEnabled               = $false
+        isEnabled               = $true
         type                    = "User"
         adminConsentDescription = "Allow the application to access $WebApplicationName on behalf of the signed-in user."
         adminConsentDisplayName = "Access $WebApplicationName"
@@ -353,7 +353,7 @@ function add-servicePrincipal($webApp) {
     #Service Principal
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals")
     $servicePrincipal = @{
-        accountEnabled            = $false
+        accountEnabled            = $true
         appId                     = $webApp.appId
         displayName               = $webApp.displayName
         appRoleAssignmentRequired = $true
