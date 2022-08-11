@@ -49,7 +49,7 @@ Param
     [Parameter(ParameterSetName = 'Setting', Mandatory = $true)]
     [String]
     $TenantId,
-	
+
     [Parameter(ParameterSetName = 'Setting', Mandatory = $true)]
     [String]
     $WebApplicationId,
@@ -112,7 +112,7 @@ function main() {
     # get verified domain
     $domain = get-verifiedDomain
     assert-notNull $domain 'domain is not found'
-    
+
     # get service principal id
     $servicePrincipalId = get-servicePrincipalId
     assert-notNull $servicePrincipalId 'Service principal of web application is not found'
@@ -126,15 +126,18 @@ function main() {
 
     # cleanup
     if ($remove) {
-        write-warning "removing user $servicePrincipalId"
+        if ((read-host "removing user $servicePrincipalId from Azure AD. do you want to continue?[y|n]") -imatch "n") {
+            return
+        }
+        
         $result = remove-user -userPrincipalName $servicePrincipalId
         write-host "removal complete" -ForegroundColor Green
         return $result
     }
-   
+
     # check / create user
     $newUser = add-user -userName $userName -domain $domain -appRoles $appRoles
-    assert-notNull $newUser 'unable to create new user $userName'
+    assert-notNull $newUser "unable to create new user $userName"
     write-host "user $userName created successfully"
     return $newUser
 }
@@ -186,10 +189,10 @@ function add-user($userName, $domain, $appRoles) {
             Write-Host 'Read-Only User Created:' $userId
         }
     }
-    
+
     write-host "user id: $userId"
     $currentAppRoleAssignment = get-roleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId
-    
+
     if (!$currentAppRoleAssignment) {
         $currentAppRoleAssignment = add-roleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId
     }
@@ -200,13 +203,13 @@ function add-user($userName, $domain, $appRoles) {
 function get-roleAssignment($userId, $roleId, $servicePrincipalId) {
     #get user role assignments
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$servicePrincipalId/appRoleAssignedTo")
-    
+
     $results = call-graphApi -uri $uri -method 'get'
     write-host "current available assignments from $servicePrincipalId : $($results | convertto-json -depth 5)"
-    
+
     $appRoles = @($results.value)
     $appRoleAssignment = $appRoles | Where-Object { ($psitem.appRoleId -ieq $roleId) -and ($psitem.principalId -ieq $userId) }
-    
+
     write-host "current app role assignment:$appRoleAssignment"
     return $appRoleAssignment
 }
@@ -224,7 +227,7 @@ function get-verifiedDomain() {
         $uri = [string]::Format($graphAPIFormat, "domains", "")
         $domains = @((call-graphApi -uri $uri -method 'get').value)
         write-verbose "domain list: $($domains | convertto-json -depth 2)"
-        
+
         $verifiedDomains = @($domains | Where-Object isVerified -eq $true)
         write-verbose "verified domain list: $($verifiedDomains | convertto-json -depth 2)"
         $verifiedDomain = @($domains | Where-Object { $_.isVerified -eq $true -and $_.isDefault -eq $true })
@@ -265,7 +268,7 @@ function get-servicePrincipalId() {
 function get-appRoles() {
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"appId:$WebApplicationId`"")
     $appRoles = (call-graphApi -uri $uri -method 'get').value.appRoles
-    
+
     write-host "returning appRoles:$($appRoles | convertto-json)"
     return $appRoles
 }
@@ -284,7 +287,7 @@ function get-roleId($appRoles) {
 function remove-user($userName, $domain, $appRoles) {
     $userPrincipalName = "$userName@$domain"
     $userId = (get-user -UserPrincipalName $userPrincipalName).id
-    
+
     if (!$userId) {
         return $true
     }
@@ -311,7 +314,7 @@ function set-userName() {
             $UserName = 'ServiceFabricUser'
         }
     }
-    
+
     return $UserName
 }
 
