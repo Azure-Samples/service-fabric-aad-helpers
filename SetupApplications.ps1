@@ -274,7 +274,9 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
         }
     }
 
+    # add
     $webApp = call-graphApi -uri $uri -body $webApp
+    
     if ($webApp) {
         while (!(get-appRegistration -WebApplicationUri $WebApplicationUri)) {
             write-host "waiting for app registration completion" -ForegroundColor Magenta
@@ -343,6 +345,10 @@ function add-oauthPermissions($webApp, $WebApplicationName) {
     }
 
     if ($result) {
+        while (!(get-OauthPermissions -webApp $webApp)) {
+            write-host "waiting for oauth permission completion" -ForegroundColor Magenta
+            start-sleep -seconds $sleepSeconds
+        }
         return $userImpersonationScopeId
     }
 
@@ -404,6 +410,18 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
 
     $result = call-graphApi -uri $uri -body $oauth2PermissionGrants
     assert-notNull $result "aad app service principal oauth permissions $scope configuration failed"
+
+    if ($result) {
+        while ($true) {
+            $checkGrants = get-oauthPermissionGrants($clientId)
+            if (!$checkGrants -or !($checkGrants.scope.Contains($scope))) {
+                write-host "waiting for service principal grants creation completion" -ForegroundColor Magenta
+                start-sleep -seconds $sleepSeconds
+            }
+            break
+        }
+    }
+
     return $result
 }
 
