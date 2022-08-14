@@ -87,7 +87,12 @@ Param
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
     [Switch]
-    $remove
+    $remove,
+
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
+    [Switch]
+    $force
 )
 
 if ($ConfigObj) {
@@ -126,11 +131,11 @@ function main() {
 
     # cleanup
     if ($remove) {
-        if ((read-host "removing user $servicePrincipalId from Azure AD. do you want to continue?[y|n]") -imatch "n") {
+        if (!$force -and (read-host "removing user $userName from Azure AD. do you want to continue?[y|n]") -imatch "n") {
             return
         }
-        
-        $result = remove-user -userPrincipalName $servicePrincipalId
+                
+        $result = remove-user -userName $userName -domain $domain
         write-host "removal complete" -ForegroundColor Green
         return $result
     }
@@ -284,7 +289,7 @@ function get-roleId($appRoles) {
     return  $roleId
 }
 
-function remove-user($userName, $domain, $appRoles) {
+function remove-user($userName, $domain) {
     $userPrincipalName = "$userName@$domain"
     $userId = (get-user -UserPrincipalName $userPrincipalName).id
 
