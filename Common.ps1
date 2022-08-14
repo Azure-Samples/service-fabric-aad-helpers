@@ -63,6 +63,7 @@ function call-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $met
         return $resultObj
     }
     catch [System.Exception] {
+        # 404
         write-warning "call-graphApi exception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"
         return $null
     }

@@ -178,7 +178,7 @@ function main () {
     # check / add servicePrincipal
     $servicePrincipal = get-servicePrincipal -webApp $webApp
     if (!$servicePrincipal) {
-        $servicePrincipal = add-servicePrincipal -webApp $webApp
+        $servicePrincipal = add-servicePrincipal -webApp $webApp -assignmentRequired $true
     }
     assert-notNull $servicePrincipal 'service principal configuration failed'
     Write-Host "Service Principal Created: $($servicePrincipal.appId)" -ForegroundColor Green
@@ -196,7 +196,7 @@ function main () {
     # check / add native app service principal
     $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp
     if (!$servicePrincipalNa) {
-        $servicePrincipalNa = add-servicePrincipal -webApp $nativeApp
+        $servicePrincipalNa = add-servicePrincipal -webApp $nativeApp -assignmentRequired $false
     }
     assert-notNull $servicePrincipalNa 'native app service principal configuration failed'
     Write-Host "Native app service principal created: $($servicePrincipalNa.appId)" -ForegroundColor Green
@@ -349,14 +349,14 @@ function add-oauthPermissions($webApp, $WebApplicationName) {
     return $null
 }
 
-function add-servicePrincipal($webApp) {
+function add-servicePrincipal($webApp, $assignmentRequired) {
     #Service Principal
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals")
     $servicePrincipal = @{
         accountEnabled            = $true
         appId                     = $webApp.appId
         displayName               = $webApp.displayName
-        appRoleAssignmentRequired = $true
+        appRoleAssignmentRequired = $assignmentRequired
     }
 
     $servicePrincipal = call-graphApi -uri $uri -body $servicePrincipal
