@@ -133,7 +133,7 @@ function main() {
     }
 
     # get service principal id
-    $servicePrincipalId = get-servicePrincipalId
+    $servicePrincipalId = get-servicePrincipalId -servicePrincipalId $servicePrincipalId
     assert-notNull $servicePrincipalId 'Service principal of web application is not found'
 
     # get app roles
@@ -259,7 +259,7 @@ function get-verifiedDomain() {
     return $domain
 }
 
-function get-servicePrincipalId() {
+function get-servicePrincipalId($servicePrincipalId) {
     if (!$servicePrincipalId) {
         #$uri = [string]::Format($graphAPIFormat, "servicePrincipals", [string]::Format('&$filter=appId eq ''{0}''', $WebApplicationId))
         $uri = [string]::Format($graphAPIFormat, "servicePrincipals?`$search=`"appId:$WebApplicationId`"")
