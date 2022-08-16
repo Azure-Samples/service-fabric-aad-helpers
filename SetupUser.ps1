@@ -147,20 +147,32 @@ function add-roleAssignment($userId, $roleId, $servicePrincipalId) {
     $appRoleAssignments = @{
         appRoleId   = $roleId
         principalId = $userId
-        #principalType = "User"
         resourceId  = $servicePrincipalId
     }
 
-    $results = call-graphApi -uri $uri -body $appRoleAssignments
-    write-host "create role results: $($results | convertto-json -Depth 2)"
-    return $results
+    $result = call-graphApi -uri $uri -body $appRoleAssignments
+    write-host "create role result: $($result | convertto-json -Depth 2)"
+
+    if ($result) {
+        while (!(get-roleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId)) {
+            write-host "waiting for user role assignment $roleId to complete..." -ForegroundColor Magenta
+            start-sleep -seconds $sleepSeconds
+        }
+    }
+    elseif ($global:graphStatusCode -eq 400) {
+        write-host "waiting for user role assignment $roleId to complete retry..." -ForegroundColor Magenta
+        start-sleep -seconds $sleepSeconds
+        $result = add-roleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId
+    }
+
+    return $result
 }
 
 function add-user($userName, $domain, $appRoles) {
     #Create User
     $userPrincipalName = "$userName@$domain"
     $roleId = get-roleId -appRoles $appRoles
-    $userId = (get-user -UserPrincipalName $userPrincipalName).value.id #.objectId
+    $userId = (get-user -UserPrincipalName $userPrincipalName).value.id
 
     if (!$userId) {
         $uri = [string]::Format($graphAPIFormat, "users", "")
@@ -214,7 +226,6 @@ function get-roleAssignment($userId, $roleId, $servicePrincipalId) {
 }
 
 function get-user($UserPrincipalName) {
-    #$uri = [string]::Format($graphAPIFormat, "users", [string]::Format('&$filter=displayName eq ''{0}''', $UserName))
     $uri = [string]::Format($graphAPIFormat, "users?`$search=`"userPrincipalName:$userPrincipalName`"")
     $user = (call-graphApi -uri $uri -method 'get')
     write-host "user: $($user | convertto-json -depth 2)"
@@ -255,7 +266,6 @@ function get-verifiedDomain() {
 
 function get-servicePrincipalId($servicePrincipalId) {
     if (!$servicePrincipalId) {
-        #$uri = [string]::Format($graphAPIFormat, "servicePrincipals", [string]::Format('&$filter=appId eq ''{0}''', $WebApplicationId))
         $uri = [string]::Format($graphAPIFormat, "servicePrincipals?`$search=`"appId:$WebApplicationId`"")
         $servicePrincipalId = (call-graphApi -uri $uri -method 'get').value.id #objectId
     }

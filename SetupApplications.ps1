@@ -129,11 +129,11 @@ function main () {
         $NativeClientApplicationName = "ServiceFabricClusterNativeClient"
     }
 
-    # AAD access
+    # MS Graph access User.Read
     $requiredResourceAccess = @(@{
-            resourceAppId  = "00000002-0000-0000-c000-000000000000"
+            resourceAppId  = "00000003-0000-0000-c000-000000000000"
             resourceAccess = @(@{
-                    id   = "311a71cc-e848-46a1-bdf8-97ff7156d8e6"
+                    id   = "e1fe6dd8-ba31-4d61-89e7-88639da4683d"
                     type = "Scope"
                 })
         })
@@ -338,6 +338,13 @@ function add-oauthPermissions($webApp, $WebApplicationName) {
         value                   = "user_impersonation"
     }
 
+    while (!(call-graphApi -uri $patchApplicationUri -method get)) {
+        write-host "waiting for patch application uri to be available" -ForegroundColor Magenta
+        start-sleep -seconds $sleepSeconds
+    }
+
+    # timing issue even when call above successful
+
     $result = call-graphApi -uri $patchApplicationUri -method "Patch" -body @{
         'api' = @{
             "oauth2PermissionScopes" = $webApp.api.oauth2PermissionScopes
@@ -366,11 +373,17 @@ function add-servicePrincipal($webApp, $assignmentRequired) {
     }
 
     $servicePrincipal = call-graphApi -uri $uri -body $servicePrincipal
+
     if ($servicePrincipal) {
         while (!(get-servicePrincipal -webApp $webApp)) {
             write-host "waiting for service principal creation completion" -ForegroundColor Magenta
             start-sleep -seconds $sleepSeconds
         }
+    }
+    elseif ($global:graphStatusCode -eq 400) {
+        write-host "waiting for service principal creation completion retry" -ForegroundColor Magenta
+        start-sleep -seconds $sleepSeconds
+        $servicePrincipal = add-servicePrincipal -webApp $webApp -assignmentRequired $assignmentRequired
     }
 
     return $servicePrincipal

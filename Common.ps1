@@ -25,6 +25,7 @@ function assert-notNull($obj, $msg) {
 function call-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $method = 'post') {
     try {
         $error.clear()
+        $global:graphStatusCode = $null
         $json = $body | ConvertTo-Json -Depth 99 -Compress
         $logHeaders = $headers.clone()
         $logHeaders.Authorization = $logHeaders.Authorization.substring(0, 30) + '...'
@@ -34,7 +35,8 @@ function call-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $met
         $resultObj = $result.Content | convertfrom-json
         $resultJson = $resultObj | convertto-json -depth 99
         write-host "Invoke-WebRequest result:`r`n`t$resultJson" -ForegroundColor cyan
-       
+        $global:graphStatusCode = $psitem.Exception.Response.StatusCode.value__
+        
         if ($result.StatusCode -ne 200) {
             switch ($result.StatusCode) {
                 201 {
@@ -63,8 +65,18 @@ function call-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $met
         return $resultObj
     }
     catch [System.Exception] {
-        # 404
-        write-warning "call-graphApi exception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"
+        # 404 400
+        $global:graphStatusCode = $psitem.Exception.Response.StatusCode.value__
+        $errorString = "call-graphApi status: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"        
+
+        if ($global:graphStatusCode -ne 400 -and $global:graphStatusCode -ne 404) {
+            write-warning $errorString
+        }
+        else {
+            Write-Verbose $errorString
+            Write-Warning "call-graphApi response status: $global:graphStatusCode"
+        }
+
         return $null
     }
 }
@@ -246,6 +258,8 @@ switch ($Location) {
         $authString = "https://login.microsoftonline.com/" + $TenantId
     }
 }
+
+$global:graphStatusCode = $null
 
 $headers = main
 $global:defaultHeaders = $headers
