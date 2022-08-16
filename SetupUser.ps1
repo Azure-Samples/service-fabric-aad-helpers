@@ -123,13 +123,7 @@ function main() {
 
     # cleanup
     if ($remove) {
-        if (!$force -and (read-host "removing user $userName from Azure AD. do you want to continue?[y|n]") -imatch "n") {
-            return
-        }
-                    
-        $result = remove-user -userName $userName -domain $domain
-        write-host "removal complete" -ForegroundColor Green
-        return $result
+        return (remove-user -userName $userName -domain $domain)
     }
 
     # get service principal id
@@ -297,8 +291,14 @@ function remove-user($userName, $domain) {
         return $true
     }
 
+    if (!$force -and (read-host "removing user $userName from Azure AD. do you want to continue?[y|n]") -imatch "n") {
+        return
+    }
+
     $uri = [string]::Format($graphAPIFormat, "users/$userPrincipalName")
     $result = call-graphApi -uri $uri -method 'delete'
+
+    write-host "removal complete" -ForegroundColor Green
 
     if ($result) {
         while ((get-user -UserPrincipalName $userPrincipalName).value) {
