@@ -118,14 +118,6 @@ function main() {
     $domain = get-verifiedDomain
     assert-notNull $domain 'domain is not found'
 
-    # get service principal id
-    $servicePrincipalId = get-servicePrincipalId
-    assert-notNull $servicePrincipalId 'Service principal of web application is not found'
-
-    # get app roles
-    $appRoles = get-appRoles
-    assert-notNull $appRoles 'AppRoles of web application is not found'
-
     # set user name
     $userName = set-userName
 
@@ -134,11 +126,19 @@ function main() {
         if (!$force -and (read-host "removing user $userName from Azure AD. do you want to continue?[y|n]") -imatch "n") {
             return
         }
-                
+                    
         $result = remove-user -userName $userName -domain $domain
         write-host "removal complete" -ForegroundColor Green
         return $result
     }
+
+    # get service principal id
+    $servicePrincipalId = get-servicePrincipalId
+    assert-notNull $servicePrincipalId 'Service principal of web application is not found'
+
+    # get app roles
+    $appRoles = get-appRoles
+    assert-notNull $appRoles 'AppRoles of web application is not found'
 
     # check / create user
     $newUser = add-user -userName $userName -domain $domain -appRoles $appRoles
@@ -291,7 +291,7 @@ function get-roleId($appRoles) {
 
 function remove-user($userName, $domain) {
     $userPrincipalName = "$userName@$domain"
-    $userId = (get-user -UserPrincipalName $userPrincipalName).id
+    $userId = (get-user -UserPrincipalName $userPrincipalName).value.id
 
     if (!$userId) {
         return $true
@@ -301,7 +301,7 @@ function remove-user($userName, $domain) {
     $result = call-graphApi -uri $uri -method 'delete'
 
     if ($result) {
-        while ((get-user -UserPrincipalName $userPrincipalName)) {
+        while ((get-user -UserPrincipalName $userPrincipalName).value) {
             write-host "waiting for user $userPrincipalName delete to complete..." -ForegroundColor Magenta
             start-sleep -seconds $sleepSeconds
         }
