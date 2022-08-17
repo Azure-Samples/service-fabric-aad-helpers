@@ -110,6 +110,8 @@ $headers = $null
 $graphAPIFormat = $resourceUrl + "/v1.0/" + $TenantId + "/{0}"
 $global:ConfigObj = @{}
 $sleepSeconds = 5
+$msGraphUserReadAppId = '00000003-0000-0000-c000-000000000000'
+$msGraphUserReadId = 'e1fe6dd8-ba31-4d61-89e7-88639da4683d'
 
 function main () {
     Write-Host 'TenantId = ' $TenantId
@@ -131,9 +133,9 @@ function main () {
 
     # MS Graph access User.Read
     $requiredResourceAccess = @(@{
-            resourceAppId  = "00000003-0000-0000-c000-000000000000"
+            resourceAppId  = $msGraphUserReadAppId
             resourceAccess = @(@{
-                    id   = "e1fe6dd8-ba31-4d61-89e7-88639da4683d"
+                    id   = $msGraphUserReadId
                     type = "Scope"
                 })
         })
@@ -507,7 +509,7 @@ function get-servicePrincipal($webApp) {
 
 function get-servicePrincipalAAD() {
     # get 'Windows Azure Active Directory' app registration by well-known appId
-    $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + '?$filter=appId eq ''00000002-0000-0000-c000-000000000000'''
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + "?`$filter=appId eq ''$msGraphUserReadAppId''"
     $global:AADServicePrincipal = call-graphApi -uri $uri -method 'get'
     write-verbose "aad service princiapal:$($AADServicePrincipal | convertto-json -depth 2)"
     return $AADServicePrincipal
