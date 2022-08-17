@@ -58,7 +58,7 @@ Param
 
     [Parameter(ParameterSetName = 'Customize')]	
     [String]
-    $WebApplicationName,
+    $webApplicationName,
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
@@ -119,8 +119,8 @@ function main () {
     $configObj.TenantId = $TenantId
     $webApp = $null
 
-    if (!$WebApplicationName) {
-        $WebApplicationName = "ServiceFabricCluster"
+    if (!$webApplicationName) {
+        $webApplicationName = "ServiceFabricCluster"
     }
     
     if (!$WebApplicationUri) {
@@ -172,7 +172,7 @@ function main () {
     # check / add oauth user_impersonation permissions
     $oauthPermissionsId = get-OauthPermissions -webApp $webApp
     if (!$oauthPermissionsId) {
-        $oauthPermissionsId = add-oauthPermissions -webApp $webApp -WebApplicationName $WebApplicationName
+        $oauthPermissionsId = add-oauthPermissions -webApp $webApp -WebApplicationName $webApplicationName
     }
     assert-notNull $oauthPermissionsId 'Web Application Oauth permissions Failed'
     Write-Host "Web Application Oauth permissions created: $($oauthPermissionsId|convertto-json)"  -ForegroundColor Green
@@ -254,7 +254,7 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
     
     if ($AddResourceAccess) {
         $webApp = @{
-            displayName            = $WebApplicationName
+            displayName            = $webApplicationName
             signInAudience         = $signInAudience
             #isFallbackPublicClient      = $true
             identifierUris         = @($WebApplicationUri)
@@ -266,7 +266,7 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
     }
     else {
         $webApp = @{
-            displayName        = $WebApplicationName
+            displayName        = $webApplicationName
             signInAudience     = $signInAudience
             #isFallbackPublicClient      = $true
             identifierUris     = @($WebApplicationUri)
@@ -324,7 +324,7 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
     return $nativeApp
 }
 
-function add-oauthPermissions($webApp, $WebApplicationName) {
+function add-oauthPermissions($webApp, $webApplicationName) {
     write-host "adding user_impersonation scope"
     $patchApplicationUri = $graphAPIFormat -f ("applications/{0}" -f $webApp.Id)
     $webApp.api.oauth2PermissionScopes = @($webApp.api.oauth2PermissionScopes)
@@ -333,10 +333,10 @@ function add-oauthPermissions($webApp, $WebApplicationName) {
         id                      = $userImpersonationScopeId
         isEnabled               = $true
         type                    = "User"
-        adminConsentDescription = "Allow the application to access $WebApplicationName on behalf of the signed-in user."
-        adminConsentDisplayName = "Access $WebApplicationName"
-        userConsentDescription  = "Allow the application to access $WebApplicationName on your behalf."
-        userConsentDisplayName  = "Access $WebApplicationName"
+        adminConsentDescription = "Allow the application to access $webApplicationName on behalf of the signed-in user."
+        adminConsentDisplayName = "Access $webApplicationName"
+        userConsentDescription  = "Allow the application to access $webApplicationName on your behalf."
+        userConsentDisplayName  = "Access $webApplicationName"
         value                   = "user_impersonation"
     }
 
@@ -360,8 +360,13 @@ function add-oauthPermissions($webApp, $WebApplicationName) {
         }
         return $userImpersonationScopeId
     }
+    elseif ($global:graphStatusCode -eq 404) {
+        write-host "waiting for oauth permission completion retry" -ForegroundColor Magenta
+        start-sleep -seconds $sleepSeconds
+        $userImpersonationScopeId = add-oauthPermissions -webApp $webApp -WebApplicationName $webApplicationName
+    }
 
-    return $null
+    return $userImpersonationScopeId
 }
 
 function add-servicePrincipal($webApp, $assignmentRequired) {
@@ -509,7 +514,7 @@ function get-servicePrincipal($webApp) {
 
 function get-servicePrincipalAAD() {
     # get 'Windows Azure Active Directory' app registration by well-known appId
-    $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + "?`$filter=appId eq ''$msGraphUserReadAppId''"
+    $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + "?`$filter=appId eq '$msGraphUserReadAppId'"
     $global:AADServicePrincipal = call-graphApi -uri $uri -method 'get'
     write-verbose "aad service princiapal:$($AADServicePrincipal | convertto-json -depth 2)"
     return $AADServicePrincipal
