@@ -1,13 +1,11 @@
-## [project-title] Changelog
+## service-fabric-aad-helpers Changelog
 
-<a name="x.y.z"></a>
-# x.y.z (yyyy-mm-dd)
+### 22-08-23 v1.1
+- add support for https://shell.azure.com
+- remove nuget requirement
+- migrate from ADAL to MSAL
+- migrate from Azure Active Directory (AAD) graph to MSGraph v1.0
+- add support for re-execution of script for resiliency
+- add additional output
+- add script to update cluster with AAD settings 'SetupClusterResource.ps1'
 
-*Features*
-* ...
-
-*Bug Fixes*
-* ...
-
-*Breaking Changes*
-* ...
