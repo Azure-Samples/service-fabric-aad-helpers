@@ -28,7 +28,7 @@ This repo provides the following scripts for Azure AD:
 
 - Windows OS
 - [Nuget CLI](https://docs.microsoft.com/en-us/nuget/tools/nuget-exe-cli-reference) (`nuget.exe`)
-- [Azure Active Directory (Azure AD) tenant](https://docs.microsoft.com/en-us/azure/active-directory/develop/quickstart-create-new-tenant)
+- [Azure Active Directory (Azure AD) tenant](https://docs.microsoft.com/en-us/azure/active-directory/develop/quickstart-create-new-tenant).  IMPORTANT: The [Microsoft.IdentityModel.Clients.ActiveDirectory](https://www.nuget.org/packages/Microsoft.IdentityModel.Clients.ActiveDirectory) NuGet package and Azure AD Authentication Library (ADAL) have been deprecated. No new features have been added since June 30, 2020.   We strongly encourage you to upgrade, see the [migration guide](https://docs.microsoft.com/azure/active-directory/develop/msal-migration) for more details. 
 
 ### Installation
 
