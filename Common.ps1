@@ -6,6 +6,7 @@ Common script, do not call directly.
 version: 2.0.1
 
 #>
+[cmdletbinding()]
 param(
     $timeoutMin = 5
 )
@@ -20,7 +21,7 @@ function main () {
 
 function assert-notNull($obj, $msg) {
     if ($obj -eq $null -or $obj.Length -eq 0) { 
-        Write-Warning $msg
+        Write-Error $msg
         exit
     }
 }
@@ -243,20 +244,26 @@ function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $m
     }
 }
 
-function wait-forResult([management.automation.functionInfo]$functionPointer, [string]$message, [datetime]$stopTime = $null, [switch]$waitForNullResult) {
-    if(!$stopTime) {
+function wait-forResult([management.automation.functionInfo]$functionPointer, [string]$message, [datetime]$stopTime = [datetime]::MinValue, [switch]$waitForNullResult) {
+    if($stopTime -eq [datetime]::MinValue) {
         $stopTime = [datetime]::Now.AddMinutes($timeoutMin)
     }
 
     while((get-date) -le $stopTime) {
+        # always sleep in case calling function is in loop
+        Start-Sleep -Seconds $sleepSeconds
+
         $result = . $functionPointer.scriptblock @args
-        write-host "$message function:$($functionPointer.Name) $($args) result:$result waitingfor:$functionResult" -ForegroundColor Magenta
+        write-host "$message`r`nfunction:$($functionPointer.Name)`r`nargs:$args`r`nresult:$result" -ForegroundColor Magenta
         
         if($result -and !$waitForNullResult) {
+            write-host "returning result:$($result | convertto-json)"
             return $result
         }
-
-        Start-Sleep -Seconds $sleepSeconds
+        elseif(!$result -and $waitForNullResult) {
+            write-host "returning `$true for null result"
+            return $true
+        }
     }
 
     assert-notNull -obj $result -msg "timed out waiting for:$message"

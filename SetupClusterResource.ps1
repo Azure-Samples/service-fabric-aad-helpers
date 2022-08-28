@@ -13,7 +13,7 @@ v 1.1
     -resourceGroupName 'mysftestcluster' `
     -clusterName 'mysftestcluster'
 #>
-
+[cmdletbinding()]
 param(
     [Parameter(ParameterSetName = 'customobj', Mandatory = $true)]
     [hashtable]$configObj = @{},

@@ -54,7 +54,7 @@ Setup up a read-only user with return SetupApplications.ps1
 
 Setup up an admin user providing values for parameters
 #>
-
+[cmdletbinding()]
 Param
 (
     [Parameter(ParameterSetName = 'Setting', Mandatory = $true)]
@@ -96,7 +96,7 @@ Param
     $Domain,
 
     [Parameter(ParameterSetName = 'Customize')]
-    [Parameter(ParameterSetName = 'Prefix')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
     [int]
     $timeoutMin = 5,
 
@@ -175,11 +175,6 @@ function add-roleAssignment($userId, $roleId, $servicePrincipalId) {
             -userId $userId `
             -roleId $roleId `
             -servicePrincipalId $servicePrincipalId
-
-        # while (!(get-roleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId)) {
-        #     write-host "waiting for user role assignment $roleId to complete..." -ForegroundColor Magenta
-        #     start-sleep -seconds $sleepSeconds
-        # }
     }
     elseif ($global:graphStatusCode -eq 400) {
         write-host "waiting for user role assignment $roleId to complete retry..." -ForegroundColor Magenta
@@ -333,15 +328,16 @@ function remove-user($userName, $domain) {
     write-host "removal complete" -ForegroundColor Green
 
     if ($result) {
-        wait-forResult -functionPointer (get-item function:\get-user) `
-            -message "waiting for user $userPrincipalName delete to complete..." `
-            -waitForNullResult `
-            -UserPrincipalName $userPrincipalName
+        $stopTime = [datetime]::now.AddMinutes($timeoutMin)
 
-        # while ((get-user -UserPrincipalName $userPrincipalName).value) {
-        #     write-host "waiting for user $userPrincipalName delete to complete..." -ForegroundColor Magenta
-        #     start-sleep -seconds $sleepSeconds
-        # }
+        do {
+            $deleteResult = wait-forResult -functionPointer (get-item function:\get-user) `
+                -message "waiting for user $userPrincipalName delete to complete..." `
+                -stopTime $stopTime `
+                -UserPrincipalName $userPrincipalName
+            start-sleep -Seconds $sleepSeconds
+        }
+        while ($deleteResult.value)
     }
 
     return $result
