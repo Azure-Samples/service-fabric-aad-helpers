@@ -1,10 +1,10 @@
 ﻿<#
-.VERSION
-2.0.0
-
 .SYNOPSIS
-Common script, do not call it directly.
-https://techcommunity.microsoft.com/t5/azure-active-directory-identity/azure-ad-change-management-simplified/ba-p/2967456
+Common script, do not call directly.
+
+.DESCRIPTION
+version: 2.0.1
+
 #>
 
 function main () {

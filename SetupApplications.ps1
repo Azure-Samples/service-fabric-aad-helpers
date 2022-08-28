@@ -1,11 +1,11 @@
 ﻿<#
-.VERSION
-2.0.0
-
 .SYNOPSIS
 Setup applications in a Service Fabric cluster Azure Active Directory tenant.
 
-.PREREQUISITE
+.DESCRIPTION
+version: 2.0.1
+
+Prerequisites:
 1. An Azure Active Directory tenant.
 2. A Global Admin user within tenant.
 
@@ -16,10 +16,14 @@ ID of tenant hosting Service Fabric cluster.
 Name of web application representing Service Fabric cluster.
 
 .PARAMETER WebApplicationUri
-App ID URI of web application.
+App ID URI of web application. If using https:// format, the domain has to be a verified domain. Format: https://<Domain name of cluster>
+Example: 'https://mycluster.contoso.com'
+Alternatively api:// format can be used which does not require a verified domain. Format: api://<tenant id>/<cluster name>
+Example: 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster'
 
 .PARAMETER WebApplicationReplyUrl
 Reply URL of web application. Format: https://<Domain name of cluster>:<Service Fabric Http gateway port>
+Example: 'https://mycluster.westus.cloudapp.azure.com:19080'
 
 .PARAMETER NativeClientApplicationName
 Name of native client application representing client.
@@ -33,18 +37,31 @@ Used to set metadata for specific region (for example: china, germany). Ignore i
 .PARAMETER AddResourceAccess
 Used to add the cluster application's resource access to "Windows Azure Active Directory" application explicitly when AAD is not able to add automatically. This may happen when the user account does not have adequate permission under this subscription.
 
+.PARAMETER signInAudience
+Sign in audience option for selection of Applicaiton AAD tenant configuration type. Default selection is 'AzureADMyOrg'
+'AzureADMyOrg', 'AzureADMultipleOrgs', 'AzureADandPersonalMicrosoftAccount'
+
+.PARAMETER timeoutMin
+Script execution retry wait timeout in minutes. Default is 5 minutes. If script times out, it can be re-executed and will continue configuration as script is idempotent.
+
+.PARAMETER force
+Use Force switch to force new authorization to acquire new token.
+
+.PARAMETER remove
+Use Remove to remove AAD configuration for provided cluster.
+
 .EXAMPLE
-. Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080'
+. Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' -WebApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080'
 
 Setup tenant with default settings generated from a friendly cluster name.
 
 .EXAMPLE
-. Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -WebApplicationName 'SFWeb' -WebApplicationUri 'https://SFweb' -WebApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080' -NativeClientApplicationName 'SFnative'
+. Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -WebApplicationName 'SFWeb' -WebApplicationUri 'https://mycluster.contoso.com' -WebApplicationReplyUrl 'https://mycluster.contoso:19080' -NativeClientApplicationName 'SFnative'
 
 Setup tenant with explicit application settings.
 
 .EXAMPLE
-. $configObj = Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080'
+. $configObj = Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' -WebApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080'
 
 Setup and save the setup result into a temporary variable to pass into SetupUser.ps1
 #>
@@ -64,12 +81,6 @@ Param
     [Parameter(ParameterSetName = 'Prefix')]
     [String]
     $WebApplicationUri,
-
-    [Parameter(ParameterSetName = 'Customize')]
-    [Parameter(ParameterSetName = 'Prefix')]
-    [String]
-    [ValidateSet('AzureADMyOrg', 'AzureADMultipleOrgs', 'AzureADandPersonalMicrosoftAccount')]
-    $signInAudience = 'AzureADMyOrg',
 
     [Parameter(ParameterSetName = 'Customize', Mandatory = $true)]
     [Parameter(ParameterSetName = 'Prefix', Mandatory = $true)]
@@ -94,7 +105,18 @@ Param
     [Parameter(ParameterSetName = 'Prefix')]
     [Switch]
     $AddResourceAccess,
-    
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [String]
+    [ValidateSet('AzureADMyOrg', 'AzureADMultipleOrgs', 'AzureADandPersonalMicrosoftAccount')]
+    $signInAudience = 'AzureADMyOrg',
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [int]
+    $timeoutMin = 5,
+
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
     [Switch]$force,
@@ -422,7 +444,7 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
     $oauth2PermissionGrants = @{
         clientId    = $clientId
         consentType = "AllPrincipals"
-        resourceId  = $resourceId #$configObj.ServicePrincipalId
+        resourceId  = $resourceId
         scope       = $scope
         startTime   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
         expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
@@ -481,6 +503,7 @@ function get-OauthPermissions($webApp) {
     # Check for an existing delegated permission with value "user_impersonation". Normally this is created by default,
     # but if it isn't, we need to update the Application object with a new one.
     $user_impersonation_scope = $webApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq "user_impersonation" }
+
     if ($user_impersonation_scope) {
         write-host "user_impersonation scope already exists. $($user_impersonation_scope.id)" -ForegroundColor yellow
         return $user_impersonation_scope.id

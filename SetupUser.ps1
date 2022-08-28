@@ -1,14 +1,13 @@
 ﻿<#
-.VERSION
-2.0.0
-
 .SYNOPSIS
 Setup user in a Service Fabric cluster Azure Active Directory tenant.
 
 .DESCRIPTION
 This script can create 2 types of users: Admin user assigned admin app role; Read-only user assigned readonly app role.
 
-.PREREQUISITE
+version: 2.0.1
+
+Prerequisites:
 1. An Azure Active Directory Tenant
 2. Service Fabric web and native client applications are setup. Or run SetupApplications.ps1.
 
@@ -31,7 +30,19 @@ User is assigned admin app role if indicated; otherwise, readonly app role.
 Temporary variable of tenant setup result returned by SetupApplications.ps1.
 
 .PARAMETER Location
-Used to set metadata for specific region (for example: china, germany). Ignore it in global environment.
+Used to set metadata for specific region (for example: china). Ignore it in global environment.
+
+.PARAMETER Domain
+Domain is the verified domain being used for user account configuration.
+
+.PARAMETER timeoutMin
+Script execution retry wait timeout in minutes. Default is 5 minutes. If script times out, it can be re-executed and will continue configuration as script is idempotent.
+
+.PARAMETER force
+Use Force switch to force removal of AAD user account if specifying -remove.
+
+.PARAMETER remove
+Use Remove to remove AAD configuration and optionally user.
 
 .EXAMPLE
 . Scripts\SetupUser.ps1 -ConfigObj $ConfigObj -UserName 'SFuser' -Password 'Test4321'
@@ -83,6 +94,11 @@ Param
     [Parameter(ParameterSetName = 'ConfigObj')]
     [String]
     $Domain,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [int]
+    $timeoutMin = 5,
 
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
