@@ -277,7 +277,7 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
     }
 
     # add
-    $webApp = call-graphApi -uri $uri -body $webApp
+    $webApp = invoke-graphApi -uri $uri -body $webApp
     
     if ($webApp) {
         while (!(get-appRegistration -WebApplicationUri $WebApplicationUri)) {
@@ -313,7 +313,7 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
         requiredResourceAccess = $nativeAppResourceAccess
     }
 
-    $nativeApp = call-graphApi -uri $uri -body $nativeAppResource
+    $nativeApp = invoke-graphApi -uri $uri -body $nativeAppResource
     if ($nativeApp) {
         while (!(get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri)) {
             write-host "waiting for native app registration completion" -ForegroundColor Magenta
@@ -340,14 +340,14 @@ function add-oauthPermissions($webApp, $webApplicationName) {
         value                   = "user_impersonation"
     }
 
-    while (!(call-graphApi -uri $patchApplicationUri -method get)) {
+    while (!(invoke-graphApi -uri $patchApplicationUri -method get)) {
         write-host "waiting for patch application uri to be available" -ForegroundColor Magenta
         start-sleep -seconds $sleepSeconds
     }
 
     # timing issue even when call above successful
 
-    $result = call-graphApi -uri $patchApplicationUri -method "Patch" -body @{
+    $result = invoke-graphApi -uri $patchApplicationUri -method "Patch" -body @{
         'api' = @{
             "oauth2PermissionScopes" = $webApp.api.oauth2PermissionScopes
         }
@@ -379,7 +379,7 @@ function add-servicePrincipal($webApp, $assignmentRequired) {
         appRoleAssignmentRequired = $assignmentRequired
     }
 
-    $servicePrincipal = call-graphApi -uri $uri -body $servicePrincipal
+    $servicePrincipal = invoke-graphApi -uri $uri -body $servicePrincipal
 
     if ($servicePrincipal) {
         while (!(get-servicePrincipal -webApp $webApp)) {
@@ -428,7 +428,7 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
         expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
     }
 
-    $result = call-graphApi -uri $uri -body $oauth2PermissionGrants
+    $result = invoke-graphApi -uri $uri -body $oauth2PermissionGrants
     assert-notNull $result "aad app service principal oauth permissions $scope configuration failed"
 
     if ($result) {
@@ -449,7 +449,7 @@ function get-appRegistration($WebApplicationUri) {
     # check for existing app by identifieruri
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"identifierUris:$WebApplicationUri`"")
    
-    $webApp = (call-graphApi -uri $uri -method 'get').value
+    $webApp = (invoke-graphApi -uri $uri -method 'get').value
     write-host "currentAppRegistration:$webApp"
 
     if ($webApp) {
@@ -465,7 +465,7 @@ function get-nativeClient($NativeClientApplicationName) {
     # check for existing native clinet
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"displayName:$NativeClientApplicationName`"")
    
-    $nativeClient = (call-graphApi -uri $uri -method 'get').value
+    $nativeClient = (invoke-graphApi -uri $uri -method 'get').value
     write-host "nativeClient:$nativeClient"
 
     if ($nativeClient) {
@@ -492,7 +492,7 @@ function get-OauthPermissions($webApp) {
 function get-oauthPermissionGrants($clientId) {
     # get 'Windows Azure Active Directory' app registration by well-known appId
     $uri = [string]::Format($graphAPIFormat, "oauth2PermissionGrants") + "?`$filter=clientId eq '$clientId'"
-    $grants = call-graphApi -uri $uri -method 'get'
+    $grants = invoke-graphApi -uri $uri -method 'get'
     write-verbose "grants:$($grants | convertto-json -depth 2)"
     return $grants.value
 }
@@ -500,7 +500,7 @@ function get-oauthPermissionGrants($clientId) {
 function get-servicePrincipal($webApp) {
     # check for existing app by identifieruri
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals?`$search=`"appId:$($webApp.appId)`"")
-    $servicePrincipal = (call-graphApi -uri $uri -method 'get').value
+    $servicePrincipal = (invoke-graphApi -uri $uri -method 'get').value
     write-host "servicePrincipal:$servicePrincipal"
 
     if ($servicePrincipal) {
@@ -515,7 +515,7 @@ function get-servicePrincipal($webApp) {
 function get-servicePrincipalAAD() {
     # get 'Windows Azure Active Directory' app registration by well-known appId
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + "?`$filter=appId eq '$msGraphUserReadAppId'"
-    $global:AADServicePrincipal = call-graphApi -uri $uri -method 'get'
+    $global:AADServicePrincipal = invoke-graphApi -uri $uri -method 'get'
     write-verbose "aad service princiapal:$($AADServicePrincipal | convertto-json -depth 2)"
     return $AADServicePrincipal
 }
@@ -529,10 +529,10 @@ function remove-appRegistration($WebApplicationUri) {
 
     $configObj.WebAppId = $webApp.appId
     $uri = [string]::Format($graphAPIFormat, "applications/$($webApp.id)")
-    $webApp = (call-graphApi -uri $uri -method 'delete')
+    $webApp = (invoke-graphApi -uri $uri -method 'delete')
 
     if ($webApp) {
-        while ((call-graphApi -uri $uri -method 'get')) {
+        while ((invoke-graphApi -uri $uri -method 'get')) {
             write-host "waiting for web client delete to complete..." -ForegroundColor Magenta
             start-sleep -seconds $sleepSeconds
         }
@@ -549,12 +549,12 @@ function remove-nativeClient($NativeClientApplicationName) {
     }
 
     $uri = [string]::Format($graphAPIFormat, "applications/$($nativeApp.id)")
-    $nativeApp = (call-graphApi -uri $uri -method 'delete')
+    $nativeApp = (invoke-graphApi -uri $uri -method 'delete')
 
     if ($nativeApp) {
         $configObj.NativeClientAppId = $nativeApp.appId
 
-        while ((call-graphApi -uri $uri -method 'get')) {
+        while ((invoke-graphApi -uri $uri -method 'get')) {
             write-host "waiting for native client delete to complete..." -ForegroundColor Magenta
             start-sleep -seconds $sleepSeconds
         }
@@ -572,7 +572,7 @@ function remove-servicePrincipal() {
         if ($servicePrincipal) {
             $configObj.ServicePrincipalId = $servicePrincipal.Id
             $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipal.id)")
-            $result = $result -and (call-graphApi -uri $uri -method 'delete')
+            $result = $result -and (invoke-graphApi -uri $uri -method 'delete')
 
             if ($result) {
                 while ((get-servicePrincipal -webApp $webApp)) {
@@ -594,7 +594,7 @@ function remove-servicePrincipalNa() {
         $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp
         if ($servicePrincipalNa) {
             $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipalNa.id)")
-            $result = call-graphApi -uri $uri -method 'delete'
+            $result = invoke-graphApi -uri $uri -method 'delete'
             if ($result) {
                 while ((get-servicePrincipal -webApp $nativeApp)) {
                     write-host "waiting for native spn delete to complete..." -ForegroundColor Magenta

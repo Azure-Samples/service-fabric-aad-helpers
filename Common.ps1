@@ -22,65 +22,6 @@ function assert-notNull($obj, $msg) {
     }
 }
 
-function call-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $method = 'post') {
-    try {
-        $error.clear()
-        $global:graphStatusCode = $null
-        $json = $body | ConvertTo-Json -Depth 99 -Compress
-        $logHeaders = $headers.clone()
-        $logHeaders.Authorization = $logHeaders.Authorization.substring(0, 30) + '...'
-        write-host "Invoke-WebRequest $uri`r`n`t-method $method`r`n`t-headers $($logHeaders | convertto-json)`r`n`t-body $($body | convertto-json -depth 99)" -ForegroundColor Green
-       
-        $result = Invoke-WebRequest $uri -Method $method -Headers $headers -Body $json
-        $resultObj = $result.Content | convertfrom-json
-        $resultJson = $resultObj | convertto-json -depth 99
-        write-host "Invoke-WebRequest result:`r`n`t$resultJson" -ForegroundColor cyan
-        $global:graphStatusCode = $psitem.Exception.Response.StatusCode.value__
-        
-        if ($result.StatusCode -ne 200) {
-            switch ($result.StatusCode) {
-                201 {
-                    if ($method -ieq 'post') {
-                        # created
-                        return $resultObj
-                    }
-
-                    return $null
-                }
-                204 {
-                    if ($method -ieq 'patch' -or $method -ieq 'delete') {
-                        write-host "$method successful." -ForegroundColor Green
-                        # successful patch or delete
-                        return $result
-                    }
-
-                    return $null
-                }
-                default: {
-                    write-warning "unhandled status code:$($result.StatusCode) $($result.StatusDescription)"
-                }
-            }
-        }
-
-        return $resultObj
-    }
-    catch [System.Exception] {
-        # 404 400
-        $global:graphStatusCode = $psitem.Exception.Response.StatusCode.value__
-        $errorString = "call-graphApi status: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"        
-
-        if ($global:graphStatusCode -ne 400 -and $global:graphStatusCode -ne 404) {
-            write-warning $errorString
-        }
-        else {
-            Write-Verbose $errorString
-            Write-Warning "call-graphApi response status: $global:graphStatusCode"
-        }
-
-        return $null
-    }
-}
-
 function get-cloudInstance() {
     $isCloudInstance = $PSVersionTable.Platform -ieq 'unix' -and ($env:ACC_CLOUD)
     write-host "cloud instance: $isCloudInstance"
@@ -238,6 +179,65 @@ function get-restTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $sc
 
     write-host "rest logon returning"
     return $global:accessToken
+}
+
+function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $method = 'post') {
+    try {
+        $error.clear()
+        $global:graphStatusCode = $null
+        $json = $body | ConvertTo-Json -Depth 99 -Compress
+        $logHeaders = $headers.clone()
+        $logHeaders.Authorization = $logHeaders.Authorization.substring(0, 30) + '...'
+        write-host "Invoke-WebRequest $uri`r`n`t-method $method`r`n`t-headers $($logHeaders | convertto-json)`r`n`t-body $($body | convertto-json -depth 99)" -ForegroundColor Green
+       
+        $result = Invoke-WebRequest $uri -Method $method -Headers $headers -Body $json
+        $resultObj = $result.Content | convertfrom-json
+        $resultJson = $resultObj | convertto-json -depth 99
+        write-host "Invoke-WebRequest result:`r`n`t$resultJson" -ForegroundColor cyan
+        $global:graphStatusCode = $psitem.Exception.Response.StatusCode.value__
+        
+        if ($result.StatusCode -ne 200) {
+            switch ($result.StatusCode) {
+                201 {
+                    if ($method -ieq 'post') {
+                        # created
+                        return $resultObj
+                    }
+
+                    return $null
+                }
+                204 {
+                    if ($method -ieq 'patch' -or $method -ieq 'delete') {
+                        write-host "$method successful." -ForegroundColor Green
+                        # successful patch or delete
+                        return $result
+                    }
+
+                    return $null
+                }
+                default: {
+                    write-warning "unhandled status code:$($result.StatusCode) $($result.StatusDescription)"
+                }
+            }
+        }
+
+        return $resultObj
+    }
+    catch [System.Exception] {
+        # 404 400
+        $global:graphStatusCode = $psitem.Exception.Response.StatusCode.value__
+        $errorString = "invoke-graphApi status: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"        
+
+        if ($global:graphStatusCode -ne 400 -and $global:graphStatusCode -ne 404) {
+            write-warning $errorString
+        }
+        else {
+            Write-Verbose $errorString
+            Write-Warning "invoke-graphApi response status: $global:graphStatusCode"
+        }
+
+        return $null
+    }
 }
 
 

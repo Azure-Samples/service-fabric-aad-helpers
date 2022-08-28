@@ -150,7 +150,7 @@ function add-roleAssignment($userId, $roleId, $servicePrincipalId) {
         resourceId  = $servicePrincipalId
     }
 
-    $result = call-graphApi -uri $uri -body $appRoleAssignments
+    $result = invoke-graphApi -uri $uri -body $appRoleAssignments
     write-host "create role result: $($result | convertto-json -Depth 2)"
 
     if ($result) {
@@ -188,14 +188,14 @@ function add-user($userName, $domain, $appRoles) {
         #Admin
         if ($IsAdmin) {
             Write-Host 'Creating Admin User: Name = ' $UserName 'Password = ' $Password
-            $userId = (call-graphApi -uri $uri -body $newUser).id
+            $userId = (invoke-graphApi -uri $uri -body $newUser).id
             assert-notNull $userId 'Admin User Creation Failed'
             Write-Host 'Admin User Created:' $userId
         }
         #Read-Only User
         else {
             Write-Host 'Creating Read-Only User: Name = ' $UserName 'Password = ' $Password
-            $userId = (call-graphApi -uri $uri -body $newUser).id
+            $userId = (invoke-graphApi -uri $uri -body $newUser).id
             assert-notNull $userId 'Read-Only User Creation Failed'
             Write-Host 'Read-Only User Created:' $userId
         }
@@ -215,7 +215,7 @@ function get-roleAssignment($userId, $roleId, $servicePrincipalId) {
     #get user role assignments
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$servicePrincipalId/appRoleAssignedTo")
 
-    $results = call-graphApi -uri $uri -method 'get'
+    $results = invoke-graphApi -uri $uri -method 'get'
     write-host "current available assignments from $servicePrincipalId : $($results | convertto-json -depth 5)"
 
     $appRoles = @($results.value)
@@ -227,7 +227,7 @@ function get-roleAssignment($userId, $roleId, $servicePrincipalId) {
 
 function get-user($UserPrincipalName) {
     $uri = [string]::Format($graphAPIFormat, "users?`$search=`"userPrincipalName:$userPrincipalName`"")
-    $user = (call-graphApi -uri $uri -method 'get')
+    $user = (invoke-graphApi -uri $uri -method 'get')
     write-host "user: $($user | convertto-json -depth 2)"
     return $user
 }
@@ -235,7 +235,7 @@ function get-user($UserPrincipalName) {
 function get-verifiedDomain() {
     if (!$domain) {
         $uri = [string]::Format($graphAPIFormat, "domains", "")
-        $domains = @((call-graphApi -uri $uri -method 'get').value)
+        $domains = @((invoke-graphApi -uri $uri -method 'get').value)
         write-verbose "domain list: $($domains | convertto-json -depth 2)"
 
         $verifiedDomains = @($domains | Where-Object isVerified -eq $true)
@@ -267,7 +267,7 @@ function get-verifiedDomain() {
 function get-servicePrincipalId($servicePrincipalId) {
     if (!$servicePrincipalId) {
         $uri = [string]::Format($graphAPIFormat, "servicePrincipals?`$search=`"appId:$WebApplicationId`"")
-        $servicePrincipalId = (call-graphApi -uri $uri -method 'get').value.id #objectId
+        $servicePrincipalId = (invoke-graphApi -uri $uri -method 'get').value.id #objectId
     }
 
     write-host "returning servicePrincipalId:$servicePrincipalId"
@@ -276,7 +276,7 @@ function get-servicePrincipalId($servicePrincipalId) {
 
 function get-appRoles() {
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"appId:$WebApplicationId`"")
-    $appRoles = (call-graphApi -uri $uri -method 'get').value.appRoles
+    $appRoles = (invoke-graphApi -uri $uri -method 'get').value.appRoles
 
     write-host "returning appRoles:$($appRoles | convertto-json)"
     return $appRoles
@@ -306,7 +306,7 @@ function remove-user($userName, $domain) {
     }
 
     $uri = [string]::Format($graphAPIFormat, "users/$userPrincipalName")
-    $result = call-graphApi -uri $uri -method 'delete'
+    $result = invoke-graphApi -uri $uri -method 'delete'
 
     write-host "removal complete" -ForegroundColor Green
 
