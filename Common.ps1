@@ -6,6 +6,9 @@ Common script, do not call directly.
 version: 2.0.1
 
 #>
+param(
+    $timeoutMin = 5
+)
 
 function main () {
     if ($headers) {
@@ -240,6 +243,25 @@ function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $m
     }
 }
 
+function wait-forResult([management.automation.functionInfo]$functionPointer, [string]$message, [datetime]$stopTime = $null, [switch]$waitForNullResult) {
+    if(!$stopTime) {
+        $stopTime = [datetime]::Now.AddMinutes($timeoutMin)
+    }
+
+    while((get-date) -le $stopTime) {
+        $result = . $functionPointer.scriptblock @args
+        write-host "$message function:$($functionPointer.Name) $($args) result:$result waitingfor:$functionResult" -ForegroundColor Magenta
+        
+        if($result -and !$waitForNullResult) {
+            return $result
+        }
+
+        Start-Sleep -Seconds $sleepSeconds
+    }
+
+    assert-notNull -obj $result -msg "timed out waiting for:$message"
+}
+
 
 # Regional settings
 switch ($Location) {
@@ -260,12 +282,11 @@ switch ($Location) {
 }
 
 $global:graphStatusCode = $null
-
+$sleepSeconds = 1
 $headers = main
 $global:defaultHeaders = $headers
 
 if ($ClusterName) {
     $WebApplicationName = $ClusterName + "_Cluster"
-    #$WebApplicationUri = "https://$ClusterName"
     $NativeClientApplicationName = $ClusterName + "_Client"
 }

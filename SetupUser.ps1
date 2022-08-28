@@ -170,10 +170,16 @@ function add-roleAssignment($userId, $roleId, $servicePrincipalId) {
     write-host "create role result: $($result | convertto-json -Depth 2)"
 
     if ($result) {
-        while (!(get-roleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId)) {
-            write-host "waiting for user role assignment $roleId to complete..." -ForegroundColor Magenta
-            start-sleep -seconds $sleepSeconds
-        }
+        wait-forResult -functionPointer (get-item function:\get-roleAssignment) `
+            -message "waiting for user role assignment $roleId to complete..." `
+            -userId $userId `
+            -roleId $roleId `
+            -servicePrincipalId $servicePrincipalId
+
+        # while (!(get-roleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId)) {
+        #     write-host "waiting for user role assignment $roleId to complete..." -ForegroundColor Magenta
+        #     start-sleep -seconds $sleepSeconds
+        # }
     }
     elseif ($global:graphStatusCode -eq 400) {
         write-host "waiting for user role assignment $roleId to complete retry..." -ForegroundColor Magenta
@@ -327,10 +333,15 @@ function remove-user($userName, $domain) {
     write-host "removal complete" -ForegroundColor Green
 
     if ($result) {
-        while ((get-user -UserPrincipalName $userPrincipalName).value) {
-            write-host "waiting for user $userPrincipalName delete to complete..." -ForegroundColor Magenta
-            start-sleep -seconds $sleepSeconds
-        }
+        wait-forResult -functionPointer (get-item function:\get-user) `
+            -message "waiting for user $userPrincipalName delete to complete..." `
+            -waitForNullResult `
+            -UserPrincipalName $userPrincipalName
+
+        # while ((get-user -UserPrincipalName $userPrincipalName).value) {
+        #     write-host "waiting for user $userPrincipalName delete to complete..." -ForegroundColor Magenta
+        #     start-sleep -seconds $sleepSeconds
+        # }
     }
 
     return $result

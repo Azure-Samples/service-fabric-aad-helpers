@@ -302,10 +302,13 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
     $webApp = invoke-graphApi -uri $uri -body $webApp
     
     if ($webApp) {
-        while (!(get-appRegistration -WebApplicationUri $WebApplicationUri)) {
-            write-host "waiting for app registration completion" -ForegroundColor Magenta
-            start-sleep -seconds $sleepSeconds
-        }
+        wait-forResult -functionPointer (get-item function:\get-appRegistration) `
+            -message "waiting for app registration completion" `
+            -WebApplicationUri $WebApplicationUri
+        # while (!(get-appRegistration -WebApplicationUri $WebApplicationUri)) {
+        #     write-host "waiting for app registration completion" -ForegroundColor Magenta
+        #     start-sleep -seconds $sleepSeconds
+        # }
     }
     return $webApp
 }
@@ -337,10 +340,14 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
 
     $nativeApp = invoke-graphApi -uri $uri -body $nativeAppResource
     if ($nativeApp) {
-        while (!(get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri)) {
-            write-host "waiting for native app registration completion" -ForegroundColor Magenta
-            start-sleep -seconds $sleepSeconds
-        }
+        wait-forResult -functionPointer (get-item function:\get-nativeClient) `
+            -message "waiting for native app registration completion" `
+            -WebApplicationUri $WebApplicationUri `
+            -NativeClientApplicationName $NativeClientApplicationName
+        # while (!(get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri)) {
+        #     write-host "waiting for native app registration completion" -ForegroundColor Magenta
+        #     start-sleep -seconds $sleepSeconds
+        # }
     }
 
     return $nativeApp
@@ -362,10 +369,15 @@ function add-oauthPermissions($webApp, $webApplicationName) {
         value                   = "user_impersonation"
     }
 
-    while (!(invoke-graphApi -uri $patchApplicationUri -method get)) {
-        write-host "waiting for patch application uri to be available" -ForegroundColor Magenta
-        start-sleep -seconds $sleepSeconds
-    }
+    wait-forResult -functionPointer (get-item function:\invoke-graphApi) `
+        -message "waiting for patch application uri to be available" `
+        -uri $patchApplicationUri `
+        -method get
+
+    # while (!(invoke-graphApi -uri $patchApplicationUri -method get)) {
+    #     write-host "waiting for patch application uri to be available" -ForegroundColor Magenta
+    #     start-sleep -seconds $sleepSeconds
+    # }
 
     # timing issue even when call above successful
 
@@ -376,10 +388,14 @@ function add-oauthPermissions($webApp, $webApplicationName) {
     }
 
     if ($result) {
-        while (!(get-OauthPermissions -webApp $webApp)) {
-            write-host "waiting for oauth permission completion" -ForegroundColor Magenta
-            start-sleep -seconds $sleepSeconds
-        }
+        wait-forResult -functionPointer (get-item function:\get-OauthPermissions) `
+            -message "waiting for oauth permission completion" `
+            -webApp $webApp
+
+        # while (!(get-OauthPermissions -webApp $webApp)) {
+        #     write-host "waiting for oauth permission completion" -ForegroundColor Magenta
+        #     start-sleep -seconds $sleepSeconds
+        # }
         return $userImpersonationScopeId
     }
     elseif ($global:graphStatusCode -eq 404) {
@@ -404,10 +420,14 @@ function add-servicePrincipal($webApp, $assignmentRequired) {
     $servicePrincipal = invoke-graphApi -uri $uri -body $servicePrincipal
 
     if ($servicePrincipal) {
-        while (!(get-servicePrincipal -webApp $webApp)) {
-            write-host "waiting for service principal creation completion" -ForegroundColor Magenta
-            start-sleep -seconds $sleepSeconds
-        }
+        wait-forResult -functionPointer (get-item function:\get-servicePrincipal) `
+            -message "waiting for service principal creation completion" `
+            -webApp $webApp
+
+        # while (!(get-servicePrincipal -webApp $webApp)) {
+        #     write-host "waiting for service principal creation completion" -ForegroundColor Magenta
+        #     start-sleep -seconds $sleepSeconds
+        # }
     }
     elseif ($global:graphStatusCode -eq 400) {
         write-host "waiting for service principal creation completion retry" -ForegroundColor Magenta
@@ -454,14 +474,24 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
     assert-notNull $result "aad app service principal oauth permissions $scope configuration failed"
 
     if ($result) {
-        while ($true) {
-            $checkGrants = get-oauthPermissionGrants($clientId)
-            if (!$checkGrants -or !($checkGrants.scope.Contains($scope))) {
-                write-host "waiting for service principal grants creation completion" -ForegroundColor Magenta
-                start-sleep -seconds $sleepSeconds
-            }
-            break
+        $stopTime = [datetime]::now.AddMinutes($timeoutMin)
+        $checkGrants = $null
+        
+        while (!$checkGrants -or !($checkGrants.scope.Contains($scope))) {
+            $checkGrants = wait-forResult -functionPointer (get-item function:\get-oauthPermissionGrants) `
+                -message "waiting for service principal grants creation completion" `
+                -stopTime $stopTime `
+                -clientId $clientId
         }
+
+        # while ($true) {
+        #     $checkGrants = get-oauthPermissionGrants -clientId $clientId
+        #     if (!$checkGrants -or !($checkGrants.scope.Contains($scope))) {
+        #         write-host "waiting for service principal grants creation completion" -ForegroundColor Magenta
+        #         start-sleep -seconds $sleepSeconds
+        #     }
+        #     break
+        # }
     }
 
     return $result
@@ -555,10 +585,16 @@ function remove-appRegistration($WebApplicationUri) {
     $webApp = (invoke-graphApi -uri $uri -method 'delete')
 
     if ($webApp) {
-        while ((invoke-graphApi -uri $uri -method 'get')) {
-            write-host "waiting for web client delete to complete..." -ForegroundColor Magenta
-            start-sleep -seconds $sleepSeconds
-        }
+        wait-forResult -functionPointer (get-item function:\invoke-graphApi) `
+            -message "waiting for web client delete to complete..." `
+            -waitForNullResult `
+            -uri $uri `
+            -method 'get'
+
+        # while ((invoke-graphApi -uri $uri -method 'get')) {
+        #     write-host "waiting for web client delete to complete..." -ForegroundColor Magenta
+        #     start-sleep -seconds $sleepSeconds
+        # }
     }
 
     return $true
@@ -577,10 +613,16 @@ function remove-nativeClient($NativeClientApplicationName) {
     if ($nativeApp) {
         $configObj.NativeClientAppId = $nativeApp.appId
 
-        while ((invoke-graphApi -uri $uri -method 'get')) {
-            write-host "waiting for native client delete to complete..." -ForegroundColor Magenta
-            start-sleep -seconds $sleepSeconds
-        }
+        wait-forResult -functionPointer (get-item function:\invoke-graphApi) `
+            -message "waiting for native client delete to complete..." `
+            -waitForNullResult `
+            -uri $uri `
+            -method 'get'
+
+        # while ((invoke-graphApi -uri $uri -method 'get')) {
+        #     write-host "waiting for native client delete to complete..." -ForegroundColor Magenta
+        #     start-sleep -seconds $sleepSeconds
+        # }
     }
 
     return $true
@@ -598,10 +640,15 @@ function remove-servicePrincipal() {
             $result = $result -and (invoke-graphApi -uri $uri -method 'delete')
 
             if ($result) {
-                while ((get-servicePrincipal -webApp $webApp)) {
-                    write-host "waiting for web spn delete to complete..." -ForegroundColor Magenta
-                    start-sleep -seconds $sleepSeconds
-                }
+                wait-forResult -functionPointer (get-item function:\get-servicePrincipal) `
+                    -message "waiting for web spn delete to complete..." `
+                    -waitForNullResult `
+                    -webApp $webApp
+    
+                # while ((get-servicePrincipal -webApp $webApp)) {
+                #     write-host "waiting for web spn delete to complete..." -ForegroundColor Magenta
+                #     start-sleep -seconds $sleepSeconds
+                # }
             }
         }
     }
@@ -619,10 +666,15 @@ function remove-servicePrincipalNa() {
             $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipalNa.id)")
             $result = invoke-graphApi -uri $uri -method 'delete'
             if ($result) {
-                while ((get-servicePrincipal -webApp $nativeApp)) {
-                    write-host "waiting for native spn delete to complete..." -ForegroundColor Magenta
-                    start-sleep -seconds $sleepSeconds
-                }
+                wait-forResult -functionPointer (get-item function:\get-servicePrincipal) `
+                    -message "waiting for native spn delete to complete..." `
+                    -waitForNullResult `
+                    -webApp $nativeApp
+    
+                # while ((get-servicePrincipal -webApp $nativeApp)) {
+                #     write-host "waiting for native spn delete to complete..." -ForegroundColor Magenta
+                #     start-sleep -seconds $sleepSeconds
+                # }
             }
         }    
     }
