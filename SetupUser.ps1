@@ -95,10 +95,15 @@ Param
     [String]
     $Domain,
 
-    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
     [int]
     $timeoutMin = 5,
+
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
+    [string]
+    $logFile,
 
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
@@ -122,7 +127,26 @@ $servicePrincipalId = $null
 $WebApplicationId = $null
 $sleepSeconds = 5
 
-function main() {
+function main () {
+    try {
+        if ($logFile) {
+            Start-Transcript -path $logFile -Force
+        }
+
+        enable-AADUser
+    }
+    catch [Exception] {
+        $errorString = "exception: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"
+        write-error $errorString
+    }
+    finally {
+        if ($logFile) {
+            Stop-Transcript
+        }
+    }
+}
+
+function enable-AADUser() {
     Write-Host 'TenantId = ' $TenantId
 
     if ($ConfigObj) {

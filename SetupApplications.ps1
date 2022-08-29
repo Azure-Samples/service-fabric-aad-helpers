@@ -119,6 +119,11 @@ Param
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
+    [string]
+    $logFile,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
     [Switch]$force,
 
     [Parameter(ParameterSetName = 'Customize')]
@@ -136,112 +141,22 @@ $msGraphUserReadAppId = '00000003-0000-0000-c000-000000000000'
 $msGraphUserReadId = 'e1fe6dd8-ba31-4d61-89e7-88639da4683d'
 
 function main () {
-    Write-Host 'TenantId = ' $TenantId
-    $configObj.ClusterName = $clusterName
-    $configObj.TenantId = $TenantId
-    $webApp = $null
+    try {
+        if ($logFile) {
+            Start-Transcript -path $logFile -Force
+        }
 
-    if (!$webApplicationName) {
-        $webApplicationName = "ServiceFabricCluster"
+        enable-AAD
     }
-    
-    if (!$WebApplicationUri) {
-        $WebApplicationUri = "https://ServiceFabricCluster"
+    catch [Exception] {
+        $errorString = "exception: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"
+        write-error $errorString
     }
-    
-    if (!$NativeClientApplicationName) {
-        $NativeClientApplicationName = "ServiceFabricClusterNativeClient"
+    finally {
+        if ($logFile) {
+            Stop-Transcript
+        }
     }
-
-    # MS Graph access User.Read
-    $requiredResourceAccess = @(@{
-            resourceAppId  = $msGraphUserReadAppId
-            resourceAccess = @(@{
-                    id   = $msGraphUserReadId
-                    type = "Scope"
-                })
-        })
-
-    # cleanup
-    if ($remove) {
-        write-host "removing web service principals"
-        $result = remove-servicePrincipal
-    
-        write-host "removing web service principals"
-        $result = $result -and (remove-servicePrincipalNa)
-
-        write-warning "removing app registration"
-        $result = $result -and (remove-appRegistration -WebApplicationUri $WebApplicationUri)
-
-        write-warning "removing native app registration"
-        $result = $result -and (remove-nativeClient -nativeClientApplicationName $NativeClientApplicationName)
-        write-host "removal complete result:$result" -ForegroundColor Green
-        return $configObj
-    }
-    
-    # check / add app registration
-    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri
-    if (!$webApp) {
-        $webApp = add-appRegistration -WebApplicationUri $WebApplicationUri `
-            -WebApplicationReplyUrl $WebApplicationReplyUrl `
-            -requiredResourceAccess $requiredResourceAccess
-    }
-
-    assert-notNull $webApp 'Web Application Creation Failed'
-    $configObj.WebAppId = $webApp.appId
-    Write-Host "Web Application Created: $($webApp.appId)"
-
-    # check / add oauth user_impersonation permissions
-    $oauthPermissionsId = get-OauthPermissions -webApp $webApp
-    if (!$oauthPermissionsId) {
-        $oauthPermissionsId = add-oauthPermissions -webApp $webApp -WebApplicationName $webApplicationName
-    }
-    assert-notNull $oauthPermissionsId 'Web Application Oauth permissions Failed'
-    Write-Host "Web Application Oauth permissions created: $($oauthPermissionsId|convertto-json)"  -ForegroundColor Green
-
-    # check / add servicePrincipal
-    $servicePrincipal = get-servicePrincipal -webApp $webApp
-    if (!$servicePrincipal) {
-        $servicePrincipal = add-servicePrincipal -webApp $webApp -assignmentRequired $true
-    }
-    assert-notNull $servicePrincipal 'service principal configuration failed'
-    Write-Host "Service Principal Created: $($servicePrincipal.appId)" -ForegroundColor Green
-    $configObj.ServicePrincipalId = $servicePrincipal.Id
-
-    # check / add native app
-    $nativeApp = get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri
-    if (!$nativeApp) {
-        $nativeApp = add-nativeClient -webApp $webApp -requiredResourceAccess $requiredResourceAccess -oauthPermissionsId $oauthPermissionsId
-    }
-    assert-notNull $nativeApp 'Native Client Application Creation Failed'
-    Write-Host "Native Client Application Created: $($nativeApp.appId)"  -ForegroundColor Green
-    $configObj.NativeClientAppId = $nativeApp.appId
-
-    # check / add native app service principal
-    $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp
-    if (!$servicePrincipalNa) {
-        $servicePrincipalNa = add-servicePrincipal -webApp $nativeApp -assignmentRequired $false
-    }
-    assert-notNull $servicePrincipalNa 'native app service principal configuration failed'
-    Write-Host "Native app service principal created: $($servicePrincipalNa.appId)" -ForegroundColor Green
-
-    # check / add native app service principal AAD
-    $servicePrincipalAAD = add-servicePrincipalGrants -servicePrincipalNa $servicePrincipalNa `
-        -servicePrincipal $servicePrincipal
-
-    assert-notNull $servicePrincipalAAD 'aad app service principal configuration failed'
-    Write-Host "AAD Application Configured: $($servicePrincipalAAD)"  -ForegroundColor Green
-    write-host "configobj: $($configObj|convertto-json)"
-
-    #ARM template AAD resource
-    write-host "-----ARM template-----"
-    write-host "`"azureActiveDirectory`": $(@{
-        tenantId           = $configObj.tenantId
-        clusterApplication = $configObj.WebAppId
-        clientApplication  = $configObj.NativeClientAppId
-    } | ConvertTo-Json)," -ForegroundColor Cyan
-
-    return $configObj
 }
 
 function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requiredResourceAccess) {
@@ -461,6 +376,115 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
     }
 
     return $result
+}
+
+function enable-AAD() {
+    Write-Host 'TenantId = ' $TenantId
+    $configObj.ClusterName = $clusterName
+    $configObj.TenantId = $TenantId
+    $webApp = $null
+
+    if (!$webApplicationName) {
+        $webApplicationName = "ServiceFabricCluster"
+    }
+    
+    if (!$WebApplicationUri) {
+        $WebApplicationUri = "https://ServiceFabricCluster"
+    }
+    
+    if (!$NativeClientApplicationName) {
+        $NativeClientApplicationName = "ServiceFabricClusterNativeClient"
+    }
+
+    # MS Graph access User.Read
+    $requiredResourceAccess = @(@{
+            resourceAppId  = $msGraphUserReadAppId
+            resourceAccess = @(@{
+                    id   = $msGraphUserReadId
+                    type = "Scope"
+                })
+        })
+
+    # cleanup
+    if ($remove) {
+        write-host "removing web service principals"
+        $result = remove-servicePrincipal
+    
+        write-host "removing web service principals"
+        $result = $result -and (remove-servicePrincipalNa)
+
+        write-warning "removing app registration"
+        $result = $result -and (remove-appRegistration -WebApplicationUri $WebApplicationUri)
+
+        write-warning "removing native app registration"
+        $result = $result -and (remove-nativeClient -nativeClientApplicationName $NativeClientApplicationName)
+        write-host "removal complete result:$result" -ForegroundColor Green
+        return $configObj
+    }
+    
+    # check / add app registration
+    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri
+    if (!$webApp) {
+        $webApp = add-appRegistration -WebApplicationUri $WebApplicationUri `
+            -WebApplicationReplyUrl $WebApplicationReplyUrl `
+            -requiredResourceAccess $requiredResourceAccess
+    }
+
+    assert-notNull $webApp 'Web Application Creation Failed'
+    $configObj.WebAppId = $webApp.appId
+    Write-Host "Web Application Created: $($webApp.appId)"
+
+    # check / add oauth user_impersonation permissions
+    $oauthPermissionsId = get-OauthPermissions -webApp $webApp
+    if (!$oauthPermissionsId) {
+        $oauthPermissionsId = add-oauthPermissions -webApp $webApp -WebApplicationName $webApplicationName
+    }
+    assert-notNull $oauthPermissionsId 'Web Application Oauth permissions Failed'
+    Write-Host "Web Application Oauth permissions created: $($oauthPermissionsId|convertto-json)"  -ForegroundColor Green
+
+    # check / add servicePrincipal
+    $servicePrincipal = get-servicePrincipal -webApp $webApp
+    if (!$servicePrincipal) {
+        $servicePrincipal = add-servicePrincipal -webApp $webApp -assignmentRequired $true
+    }
+    assert-notNull $servicePrincipal 'service principal configuration failed'
+    Write-Host "Service Principal Created: $($servicePrincipal.appId)" -ForegroundColor Green
+    $configObj.ServicePrincipalId = $servicePrincipal.Id
+
+    # check / add native app
+    $nativeApp = get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri
+    if (!$nativeApp) {
+        $nativeApp = add-nativeClient -webApp $webApp -requiredResourceAccess $requiredResourceAccess -oauthPermissionsId $oauthPermissionsId
+    }
+    assert-notNull $nativeApp 'Native Client Application Creation Failed'
+    Write-Host "Native Client Application Created: $($nativeApp.appId)"  -ForegroundColor Green
+    $configObj.NativeClientAppId = $nativeApp.appId
+
+    # check / add native app service principal
+    $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp
+    if (!$servicePrincipalNa) {
+        $servicePrincipalNa = add-servicePrincipal -webApp $nativeApp -assignmentRequired $false
+    }
+    assert-notNull $servicePrincipalNa 'native app service principal configuration failed'
+    Write-Host "Native app service principal created: $($servicePrincipalNa.appId)" -ForegroundColor Green
+
+    # check / add native app service principal AAD
+    $servicePrincipalAAD = add-servicePrincipalGrants -servicePrincipalNa $servicePrincipalNa `
+        -servicePrincipal $servicePrincipal
+
+    assert-notNull $servicePrincipalAAD 'aad app service principal configuration failed'
+    Write-Host "AAD Application Configured: $($servicePrincipalAAD)"  -ForegroundColor Green
+    write-host "configobj: $($configObj|convertto-json)"
+
+    #ARM template AAD resource
+    write-host "-----ARM template-----"
+    write-host "`"azureActiveDirectory`": $(@{
+        tenantId           = $configObj.tenantId
+        clusterApplication = $configObj.WebAppId
+        clientApplication  = $configObj.NativeClientAppId
+    } | ConvertTo-Json)," -ForegroundColor Cyan
+
+    return $configObj
 }
 
 function get-appRegistration($WebApplicationUri) {

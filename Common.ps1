@@ -18,7 +18,8 @@ function main () {
 function assert-notNull($obj, $msg) {
     if ($obj -eq $null -or $obj.Length -eq 0) { 
         Write-Error $msg
-        exit
+        #exit
+        throw "assertion failure: object:$obj message:$msg"
     }
 }
 
@@ -140,12 +141,12 @@ function get-RESTHeadersGraph($tenantId) {
     $grantType = 'urn:ietf:params:oauth:grant-type:device_code' #'client_credentials', #'authorization_code'
     $scope = 'user.read openid profile Application.ReadWrite.All User.ReadWrite.All Directory.ReadWrite.All Directory.Read.All Domain.Read.All AppRoleAssignment.ReadWrite.All'
     if (!$global:accessToken -or ($global:accessTokenExpiration -lt (get-date)) -or $force) {
-        $accessToken = get-restTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -scope $scope
+        $accessToken = get-RESTTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -scope $scope
     }
     return $accessToken
 }
 
-function get-restTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $scope) {
+function get-RESTTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $scope) {
     # requires app registration
     # will retry on device code until complete
 
