@@ -300,7 +300,7 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
     $webApp = invoke-graphApi -retry -uri $uri -body $webApp -method 'post'
 
     if ($webApp) {
-        $stopTime = [datetime]::Now.AddMinutes($timeoutMin)
+        $stopTime = set-stopTime $timeoutMin
         
         while (!($webApp.api.oauth2PermissionScopes.gethashcode())) {
             $webApp = wait-forResult -functionPointer (get-item function:\get-appRegistration) `
@@ -448,7 +448,7 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
     assert-notNull $result "aad app service principal oauth permissions $scope configuration failed"
 
     if ($result) {
-        $stopTime = [datetime]::now.AddMinutes($timeoutMin)
+        $stopTime = set-stopTime $timeoutMin
         $checkGrants = $null
         
         while (!$checkGrants -or !($checkGrants.scope.Contains($scope))) {

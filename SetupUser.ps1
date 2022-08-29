@@ -323,7 +323,7 @@ function remove-user($userName, $domain) {
     write-host "removal complete" -ForegroundColor Green
 
     if ($result) {
-        $stopTime = [datetime]::now.AddMinutes($timeoutMin)
+        $stopTime = set-stopTime $timeoutMin
 
         do {
             $deleteResult = wait-forResult -functionPointer (get-item function:\get-user) `

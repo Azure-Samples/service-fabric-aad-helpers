@@ -6,10 +6,6 @@ Common script, do not call directly.
 version: 2.0.1
 
 #>
-[cmdletbinding()]
-param(
-    $timeoutMin = 5
-)
 
 function main () {
     if ($headers) {
@@ -247,7 +243,7 @@ function invoke-graphApiCall($uri, $headers = $global:defaultHeaders, $body = ''
 
 function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $method = 'post', [switch]$retry) {
     $global:graphStatusCode = 0
-    $stopTime = [datetime]::now.AddMinutes($timeoutMin)
+    $stopTime = set-stopTime $timeoutMin
     $count = 0
 
     while ((get-date) -le $stopTime) {
@@ -260,7 +256,8 @@ function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $m
             -or $global:graphStatusCode -eq 204 `
             -or $global:graphStatusCode -eq 401 `
             -or $global:graphStatusCode -eq 403
-            )) {
+            )
+        ) {
             return $result
         }
         elseif(!$retry){
@@ -271,9 +268,15 @@ function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $m
     }
 }
 
+function set-stopTime($minutes){
+    $stopTime = [datetime]::now.AddMinutes($minutes)
+    write-host "setting timeout to:$stopTime"
+    return $stopTime
+}
+
 function wait-forResult([management.automation.functionInfo]$functionPointer, [string]$message, [datetime]$stopTime = [datetime]::MinValue, [switch]$waitForNullResult) {
     if ($stopTime -eq [datetime]::MinValue) {
-        $stopTime = [datetime]::Now.AddMinutes($timeoutMin)
+        $stopTime = set-stopTime $timeoutMin
     }
 
     while ((get-date) -le $stopTime) {
