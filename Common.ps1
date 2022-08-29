@@ -22,6 +22,51 @@ function assert-notNull($obj, $msg) {
     }
 }
 
+function confirm-graphApiRetry($statusCode) {
+    # timing issues can cause 400 or 404 return
+    $retval = $false
+
+    if ($statusCode -eq 400 -or $statusCode -eq 404) {
+        $retval = $true
+    }
+
+    write-host "confirm-graphApiRetry returning:$retval"
+    return $retval
+}
+
+function confirm-statusCodeSuccess($statusCode, $method) {
+    write-host "checking status code:$statusCode method:$method"
+    $retval = $false
+
+    switch ($statusCode) {
+        { $psitem -eq 200 } {
+            $retval = $true
+            break
+        }
+        { $psitem -eq 201 -and $method -ieq 'post' } {
+            $retval = $true
+            break
+        }
+        { $psitem -eq 204 -and $method -ieq 'patch' -or $method -ieq 'delete' } {
+            $retval = $true
+            break
+        }
+
+        default {
+            $retval = $false
+            break
+        }
+    }
+    
+    if ($retval) {
+        write-host "$method successful." -ForegroundColor Green
+    }
+
+    write-host "confirm-statusCodeSuccess returning:$retval"
+    return $retval
+
+}
+
 function get-cloudInstance() {
     $isCloudInstance = $PSVersionTable.Platform -ieq 'unix' -and ($env:ACC_CLOUD)
     write-host "cloud instance: $isCloudInstance"
@@ -197,39 +242,18 @@ function invoke-graphApiCall($uri, $headers = $global:defaultHeaders, $body = ''
         write-host "Invoke-WebRequest result:`r`n`t$resultJson" -ForegroundColor cyan
         $global:graphStatusCode = $result.StatusCode
 
-        if ($result.StatusCode -ne 200) {
-            switch ($result.StatusCode) {
-                201 {
-                    if ($method -ieq 'post') {
-                        # created
-                        return $resultObj
-                    }
-
-                    return $null
-                }
-                204 {
-                    if ($method -ieq 'patch' -or $method -ieq 'delete') {
-                        write-host "$method successful." -ForegroundColor Green
-                        # successful patch or delete
-                        return $result
-                    }
-
-                    return $null
-                }
-                default: {
-                    write-warning "unhandled status code:$($result.StatusCode) $($result.StatusDescription)"
-                }
-            }
+        if (confirm-statusCodeSuccess -statusCode $global:graphStatusCode -method $method) {
+            return $resultObj
         }
 
-        return $resultObj
+        return $null
     }
     catch [System.Exception] {
         # 404 400
         $global:graphStatusCode = $psitem.Exception.Response.StatusCode.value__
         $errorString = "invoke-graphApiCall status: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"        
 
-        if ($global:graphStatusCode -ne 400 -and $global:graphStatusCode -ne 404) {
+        if (!(confirm-graphApiRetry -statusCode $global:graphStatusCode)) {
             write-warning $errorString
         }
         else {
@@ -250,17 +274,10 @@ function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $m
         $result = invoke-graphApiCall -uri $uri -headers $headers -body $body -method $method
         write-host "invoke-graphApi count:$(($count++).tostring()) statuscode:$($global:graphStatusCode) -uri $uri -headers $headers -body $body -method $method"
 
-        if ($retry -and (
-            $global:graphStatusCode -eq 200 `
-            -or $global:graphStatusCode -eq 201 `
-            -or $global:graphStatusCode -eq 204 `
-            -or $global:graphStatusCode -eq 401 `
-            -or $global:graphStatusCode -eq 403
-            )
-        ) {
+        if ($retry -and !(confirm-graphApiRetry $global:graphStatusCode) -and (confirm-statusCodeSuccess -statusCode $global:graphStatusCode -method $method)) {
             return $result
         }
-        elseif(!$retry){
+        elseif (!$retry) {
             return $result
         }
 
@@ -268,7 +285,7 @@ function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $m
     }
 }
 
-function set-stopTime($minutes){
+function set-stopTime($minutes) {
     $stopTime = [datetime]::now.AddMinutes($minutes)
     write-host "setting timeout to:$stopTime"
     return $stopTime
