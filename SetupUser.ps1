@@ -166,7 +166,7 @@ function add-roleAssignment($userId, $roleId, $servicePrincipalId) {
         resourceId  = $servicePrincipalId
     }
 
-    $result = invoke-graphApi -uri $uri -body $appRoleAssignments
+    $result = invoke-graphApi -retry -uri $uri -body $appRoleAssignments -method 'post'
     write-host "create role result: $($result | convertto-json -Depth 2)"
 
     if ($result) {
@@ -175,11 +175,6 @@ function add-roleAssignment($userId, $roleId, $servicePrincipalId) {
             -userId $userId `
             -roleId $roleId `
             -servicePrincipalId $servicePrincipalId
-    }
-    elseif ($global:graphStatusCode -eq 400) {
-        write-host "waiting for user role assignment $roleId to complete retry..." -ForegroundColor Magenta
-        start-sleep -seconds $sleepSeconds
-        $result = add-roleAssignment -userId $userId -roleId $roleId -servicePrincipalId $servicePrincipalId
     }
 
     return $result
@@ -205,14 +200,14 @@ function add-user($userName, $domain, $appRoles) {
         #Admin
         if ($IsAdmin) {
             Write-Host 'Creating Admin User: Name = ' $UserName 'Password = ' $Password
-            $userId = (invoke-graphApi -uri $uri -body $newUser).id
+            $userId = (invoke-graphApi -uri $uri -body $newUser -method 'post').id
             assert-notNull $userId 'Admin User Creation Failed'
             Write-Host 'Admin User Created:' $userId
         }
         #Read-Only User
         else {
             Write-Host 'Creating Read-Only User: Name = ' $UserName 'Password = ' $Password
-            $userId = (invoke-graphApi -uri $uri -body $newUser).id
+            $userId = (invoke-graphApi -uri $uri -body $newUser -method 'post').id
             assert-notNull $userId 'Read-Only User Creation Failed'
             Write-Host 'Read-Only User Created:' $userId
         }

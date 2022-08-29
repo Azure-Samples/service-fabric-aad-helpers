@@ -297,8 +297,8 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
     }
 
     # add
-    $webApp = invoke-graphApi -uri $uri -body $webApp
-    
+    $webApp = invoke-graphApi -retry -uri $uri -body $webApp -method 'post'
+
     if ($webApp) {
         $stopTime = [datetime]::Now.AddMinutes($timeoutMin)
         
@@ -307,12 +307,8 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
                 -message "waiting for app registration completion" `
                 -stopTime $stopTime `
                 -WebApplicationUri $WebApplicationUri
+            start-sleep -Seconds $sleepSeconds
         }
-    }
-    elseif ($global:graphStatusCode -eq 400) {
-        write-host "waiting for app registration completion retry" -ForegroundColor Magenta
-        start-sleep -seconds $sleepSeconds
-        $webApp = add-appRegistration -WebApplicationReplyUri $WebApplicationUri -WebApplicationReplyUrl $WebApplicationReplyUrl -requiredResourceAccess $requiredResourceAccess
     }
 
     return $webApp
@@ -343,17 +339,13 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
         requiredResourceAccess = $nativeAppResourceAccess
     }
 
-    $nativeApp = invoke-graphApi -uri $uri -body $nativeAppResource
+    $nativeApp = invoke-graphApi -retry -uri $uri -body $nativeAppResource -method 'post'
+
     if ($nativeApp) {
         $null = wait-forResult -functionPointer (get-item function:\get-nativeClient) `
             -message "waiting for native app registration completion" `
             -WebApplicationUri $WebApplicationUri `
             -NativeClientApplicationName $NativeClientApplicationName
-    }
-    elseif ($global:graphStatusCode -eq 400) {
-        write-host "waiting for native app registration completion retry" -ForegroundColor Magenta
-        start-sleep -seconds $sleepSeconds
-        $nativeApp = add-nativeClient -webApp $webApp -requiredResourceAccess $requiredResourceAccess -oauthPermissionsId $oauthPermissionsId
     }
 
     return $nativeApp
@@ -381,7 +373,7 @@ function add-oauthPermissions($webApp, $webApplicationName) {
         -method get
 
     # timing issue even when call above successful
-    $result = invoke-graphApi -uri $patchApplicationUri -method "Patch" -body @{
+    $result = invoke-graphApi -retry -uri $patchApplicationUri -method 'patch' -body @{
         'api' = @{
             "oauth2PermissionScopes" = $webApp.api.oauth2PermissionScopes
         }
@@ -393,11 +385,6 @@ function add-oauthPermissions($webApp, $webApplicationName) {
             -webApp $webApp
 
         return $userImpersonationScopeId
-    }
-    elseif ($global:graphStatusCode -eq 404) {
-        write-host "waiting for oauth permission completion retry" -ForegroundColor Magenta
-        start-sleep -seconds $sleepSeconds
-        $userImpersonationScopeId = add-oauthPermissions -webApp $webApp -WebApplicationName $webApplicationName
     }
 
     return $userImpersonationScopeId
@@ -414,17 +401,12 @@ function add-servicePrincipal($webApp, $assignmentRequired) {
         appRoleAssignmentRequired = $assignmentRequired
     }
 
-    $servicePrincipal = invoke-graphApi -uri $uri -body $servicePrincipal
+    $servicePrincipal = invoke-graphApi -retry -uri $uri -body $servicePrincipal -method 'post'
 
     if ($servicePrincipal) {
         $null = wait-forResult -functionPointer (get-item function:\get-servicePrincipal) `
             -message "waiting for service principal creation completion" `
             -webApp $webApp
-    }
-    elseif ($global:graphStatusCode -eq 400) {
-        write-host "waiting for service principal creation completion retry" -ForegroundColor Magenta
-        start-sleep -seconds $sleepSeconds
-        $servicePrincipal = add-servicePrincipal -webApp $webApp -assignmentRequired $assignmentRequired
     }
 
     return $servicePrincipal
@@ -462,7 +444,7 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
         expiryTime  = (Get-Date).AddYears(1800).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffff")
     }
 
-    $result = invoke-graphApi -uri $uri -body $oauth2PermissionGrants
+    $result = invoke-graphApi -uri $uri -body $oauth2PermissionGrants -method 'post'
     assert-notNull $result "aad app service principal oauth permissions $scope configuration failed"
 
     if ($result) {
@@ -474,6 +456,7 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
                 -message "waiting for service principal grants creation completion" `
                 -stopTime $stopTime `
                 -clientId $clientId
+            start-sleep -Seconds $sleepSeconds
         }
     }
 

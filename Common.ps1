@@ -185,7 +185,7 @@ function get-restTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $sc
     return $global:accessToken
 }
 
-function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $method = 'post') {
+function invoke-graphApiCall($uri, $headers = $global:defaultHeaders, $body = '', $method = 'post') {
     try {
         $error.clear()
         $global:graphStatusCode = $null
@@ -196,10 +196,11 @@ function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $m
        
         $result = Invoke-WebRequest $uri -Method $method -Headers $headers -Body $json
         $resultObj = $result.Content | convertfrom-json
+        
         $resultJson = $resultObj | convertto-json -depth 99
         write-host "Invoke-WebRequest result:`r`n`t$resultJson" -ForegroundColor cyan
-        $global:graphStatusCode = $psitem.Exception.Response.StatusCode.value__
-        
+        $global:graphStatusCode = $result.StatusCode
+
         if ($result.StatusCode -ne 200) {
             switch ($result.StatusCode) {
                 201 {
@@ -230,40 +231,66 @@ function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $m
     catch [System.Exception] {
         # 404 400
         $global:graphStatusCode = $psitem.Exception.Response.StatusCode.value__
-        $errorString = "invoke-graphApi status: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"        
+        $errorString = "invoke-graphApiCall status: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"        
 
         if ($global:graphStatusCode -ne 400 -and $global:graphStatusCode -ne 404) {
             write-warning $errorString
         }
         else {
             Write-Verbose $errorString
-            Write-Warning "invoke-graphApi response status: $global:graphStatusCode"
+            Write-Warning "invoke-graphApiCall response status: $global:graphStatusCode"
         }
 
         return $null
     }
 }
 
+function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $method = 'post', [switch]$retry) {
+    $global:graphStatusCode = 0
+    $stopTime = [datetime]::now.AddMinutes($timeoutMin)
+    $count = 0
+
+    while ((get-date) -le $stopTime) {
+        $result = invoke-graphApiCall -uri $uri -headers $headers -body $body -method $method
+        write-host "invoke-graphApi count:$(($count++).tostring()) statuscode:$($global:graphStatusCode) -uri $uri -headers $headers -body $body -method $method"
+
+        if ($retry -and (
+            $global:graphStatusCode -eq 200 `
+            -or $global:graphStatusCode -eq 201 `
+            -or $global:graphStatusCode -eq 204 `
+            -or $global:graphStatusCode -eq 401 `
+            -or $global:graphStatusCode -eq 403
+            )) {
+            return $result
+        }
+        elseif(!$retry){
+            return $result
+        }
+
+        start-sleep -Seconds $sleepSeconds
+    }
+}
+
 function wait-forResult([management.automation.functionInfo]$functionPointer, [string]$message, [datetime]$stopTime = [datetime]::MinValue, [switch]$waitForNullResult) {
-    if($stopTime -eq [datetime]::MinValue) {
+    if ($stopTime -eq [datetime]::MinValue) {
         $stopTime = [datetime]::Now.AddMinutes($timeoutMin)
     }
 
-    while((get-date) -le $stopTime) {
-        # always sleep in case calling function is in loop
-        Start-Sleep -Seconds $sleepSeconds
+    while ((get-date) -le $stopTime) {
 
         $result = . $functionPointer.scriptblock @args
         write-host "$message`r`nfunction:$($functionPointer.Name)`r`nargs:$args`r`nresult:$result" -ForegroundColor Magenta
         
-        if($result -and !$waitForNullResult) {
+        if ($result -and !$waitForNullResult) {
             write-host "returning result:$($result | convertto-json)"
             return $result
         }
-        elseif(!$result -and $waitForNullResult) {
+        elseif (!$result -and $waitForNullResult) {
             write-host "returning `$true for null result"
             return $true
         }
+
+        Start-Sleep -Seconds $sleepSeconds
     }
 
     assert-notNull -obj $result -msg "timed out waiting for:$message"
