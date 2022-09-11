@@ -298,8 +298,6 @@ function add-oauthPermissions($webApp, $webApplicationName) {
         $null = wait-forResult -functionPointer (get-item function:\get-OauthPermissions) `
             -message "waiting for oauth permission completion" `
             -webApp $webApp
-
-        return $userImpersonationScopeId
     }
 
     return $userImpersonationScopeId

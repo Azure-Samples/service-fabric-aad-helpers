@@ -1,6 +1,6 @@
 ## service-fabric-aad-helpers Changelog
 
-### 22-08-23 v1.1
+### 22-08-23 v2.0
 - add support for https://shell.azure.com
 - remove nuget requirement
 - migrate from ADAL to MSAL
