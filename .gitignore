@@ -328,3 +328,5 @@ ASALocalRun/
 
 # MFractors (Xamarin productivity tool) working folder 
 .mfractor/
+launch.json
+aad-test.ps1
