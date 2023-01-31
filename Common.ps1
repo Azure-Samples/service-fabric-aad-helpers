@@ -3,7 +3,7 @@
 Common script, do not call directly.
 
 .DESCRIPTION
-version: 2.0.1
+version: 2.0.2
 
 #>
 
@@ -234,11 +234,17 @@ function invoke-graphApiCall($uri, $headers = $global:defaultHeaders, $body = ''
         $json = $body | ConvertTo-Json -Depth 99 -Compress
         $logHeaders = $headers.clone()
         $logHeaders.Authorization = $logHeaders.Authorization.substring(0, 30) + '...'
-        write-host "Invoke-WebRequest $uri`r`n`t-method $method`r`n`t-headers $($logHeaders | convertto-json)`r`n`t-body $($body | convertto-json -depth 99)" -ForegroundColor Green
-       
-        $result = Invoke-WebRequest $uri -Method $method -Headers $headers -Body $json
+
+        if ($method -ieq 'post' -or $method -ieq 'patch') {
+            write-host "Invoke-WebRequest $uri`r`n`t-method $method`r`n`t-headers $($logHeaders | convertto-json)`r`n`t-body $($body | convertto-json -depth 99)" -ForegroundColor Green
+            $result = Invoke-WebRequest $uri -Method $method -Headers $headers -Body $json
+        }
+        else {
+            write-host "Invoke-WebRequest $uri`r`n`t-method $method`r`n`t-headers $($logHeaders | convertto-json)" -ForegroundColor Green
+            $result = Invoke-WebRequest $uri -Method $method -Headers $headers
+        }
+
         $resultObj = $result.Content | convertfrom-json
-        
         $resultJson = $resultObj | convertto-json -depth 99
         write-host "Invoke-WebRequest result:`r`n`t$resultJson" -ForegroundColor cyan
         $global:graphStatusCode = $result.StatusCode
@@ -252,7 +258,7 @@ function invoke-graphApiCall($uri, $headers = $global:defaultHeaders, $body = ''
     catch [System.Exception] {
         # 404 400
         $global:graphStatusCode = $psitem.Exception.Response.StatusCode.value__
-        $errorString = "invoke-graphApiCall status: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"        
+        $errorString = "invoke-graphApiCall status: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"
 
         if (!(confirm-graphApiRetry -statusCode $global:graphStatusCode)) {
             write-warning $errorString
