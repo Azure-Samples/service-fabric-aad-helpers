@@ -104,11 +104,12 @@ function get-restAuthGraph($tenantId, $clientId, $scope, $uri = 'https://login.m
 }
 
 function get-RESTHeaders() {
-
+    $token = $null
     if (get-cloudInstance) {
         $token = get-RESTHeadersCloud
     }
-    else {
+    
+    if (!$token) {
         $token = get-RESTHeadersGraph -tenantId $TenantId
     }
     
@@ -124,14 +125,20 @@ function get-RESTHeaders() {
 
 function get-RESTHeadersCloud() { 
     # https://docs.microsoft.com/en-us/azure/cloud-shell/msi-authorization
-    $response = invoke-webRequest -method post `
-        -uri 'http://localhost:50342/oauth2/token' `
-        -body "resource=$resourceUrl" `
-        -header @{'metadata' = 'true' }
+    try {
+        # will fail on local cloud shell
+        $response = invoke-webRequest -method post `
+            -uri 'http://localhost:50342/oauth2/token' `
+            -body "resource=$resourceUrl" `
+            -header @{'metadata' = 'true' }
 
-    write-host $response | convertto-json
-    $token = ($response | convertfrom-json).access_token
-    return $token
+        write-host $response | convertto-json
+        $token = ($response | convertfrom-json).access_token
+        return $token
+    }
+    catch {
+        return $null
+    }
 }
 
 function get-RESTHeadersGraph($tenantId) {
