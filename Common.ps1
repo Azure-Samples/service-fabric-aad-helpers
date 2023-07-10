@@ -3,7 +3,7 @@
 Common script, do not call directly.
 
 .DESCRIPTION
-version: 2.0.2
+version: 2.0.3
 
 #>
 
@@ -74,12 +74,12 @@ function get-cloudInstance() {
     return $isCloudInstance
 }
 
-function get-restAuthGraph($tenantId, $clientId, $scope, $uri) {
-    # requires app registration api permissions with 'devops' added
-    # so cannot use internally
+function get-restAuthGraph($tenantId, $clientId, $scope, $uri = 'https://login.microsoftonline.com') {
+    # authenticate to Graph using device code
+
     write-host "auth request" -ForegroundColor Green
     $error.clear()
-    $uri = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/devicecode"
+    $uri = "$uri/$tenantId/oauth2/v2.0/devicecode"
 
     $Body = @{
         'client_id' = $clientId
@@ -104,12 +104,12 @@ function get-restAuthGraph($tenantId, $clientId, $scope, $uri) {
 }
 
 function get-RESTHeaders() {
-    $redirectUrl = "urn:ietf:wg:oauth:2.0:oob"
-
+    $token = $null
     if (get-cloudInstance) {
         $token = get-RESTHeadersCloud
     }
-    else {
+    
+    if (!$token) {
         $token = get-RESTHeadersGraph -tenantId $TenantId
     }
     
@@ -125,14 +125,20 @@ function get-RESTHeaders() {
 
 function get-RESTHeadersCloud() { 
     # https://docs.microsoft.com/en-us/azure/cloud-shell/msi-authorization
-    $response = invoke-webRequest -method post `
-        -uri 'http://localhost:50342/oauth2/token' `
-        -body "resource=$resourceUrl" `
-        -header @{'metadata' = 'true' }
+    try {
+        # will fail on local cloud shell
+        $response = invoke-webRequest -method post `
+            -uri 'http://localhost:50342/oauth2/token' `
+            -body "resource=$resourceUrl" `
+            -header @{'metadata' = 'true' }
 
-    write-host $response | convertto-json
-    $token = ($response | convertfrom-json).access_token
-    return $token
+        write-host $response | convertto-json
+        $token = ($response | convertfrom-json).access_token
+        return $token
+    }
+    catch {
+        return $null
+    }
 }
 
 function get-RESTHeadersGraph($tenantId) {
@@ -141,26 +147,26 @@ function get-RESTHeadersGraph($tenantId) {
     $grantType = 'urn:ietf:params:oauth:grant-type:device_code' #'client_credentials', #'authorization_code'
     $scope = 'user.read openid profile Application.ReadWrite.All User.ReadWrite.All Directory.ReadWrite.All Directory.Read.All Domain.Read.All AppRoleAssignment.ReadWrite.All'
     if (!$global:accessToken -or ($global:accessTokenExpiration -lt (get-date)) -or $force) {
-        $accessToken = get-RESTTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -scope $scope
+        $accessToken = get-RESTTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -scope $scope -uri $authString
     }
     return $accessToken
 }
 
-function get-RESTTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $scope) {
+function get-RESTTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $scope, $uri = 'https://login.microsoftonline.com') {
     # requires app registration
     # will retry on device code until complete
 
     write-host "token request" -ForegroundColor Green
     $global:logonResult = $null
     $error.clear()
-    $uri = "https://login.windows.net/$tenantId/oauth2/v2.0/token"
+    $uri = "$uri/$tenantId/oauth2/v2.0/token"
     $headers = @{
         'content-type' = 'application/x-www-form-urlencoded'
         'accept'       = 'application/json'
     }
 
     if ($grantType -ieq 'urn:ietf:params:oauth:grant-type:device_code') {
-        $global:authResult = get-restAuthGraph -tenantId $tenantId -clientId $clientId -scope $scope
+        $global:authResult = get-restAuthGraph -tenantId $tenantId -clientId $clientId -scope $scope -uri $authString
         $Body = @{
             'client_id'   = $clientId
             'device_code' = $global:authresult.device_code
@@ -175,7 +181,7 @@ function get-RESTTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $sc
         }
     }
     elseif ($grantType -ieq 'authorization_code') {
-        $global:authResult = get-restAuthGraph -tenantId $tenantId -clientId $clientId -scope $scope
+        $global:authResult = get-restAuthGraph -tenantId $tenantId -clientId $clientId -scope $scope -uri $authString
         $Body = @{
             'client_id'  = $clientId
             'code'       = $global:authresult.code
@@ -328,17 +334,17 @@ function wait-forResult([management.automation.functionInfo]$functionPointer, [s
 switch ($Location) {
     "china" {
         $resourceUrl = "https://graph.chinacloudapi.cn"
-        $authString = "https://login.partner.microsoftonline.cn/" + $TenantId
+        $authString = "https://login.partner.microsoftonline.cn"
     }
     
     "us" {
-        $resourceUrl = "https://graph.windows.net"
-        $authString = "https://login.microsoftonline.us/" + $TenantId
+        $resourceUrl = "https://graph.microsoft.us"
+        $authString = "https://login.microsoftonline.us"
     }
 
     default {
         $resourceUrl = "https://graph.microsoft.com"
-        $authString = "https://login.microsoftonline.com/" + $TenantId
+        $authString = "https://login.microsoftonline.com"
     }
 }
 
