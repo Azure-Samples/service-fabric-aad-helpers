@@ -4,6 +4,3 @@ $Configobj = .\SetupApplications.ps1 -TenantId '80cd59e7-5f48-4325-8769-a47bc72d
 
 For China Mooncake:
 $Configobj = .\SetupApplications.ps1 -TenantId '80cd59e7-5f48-4325-8769-a47bc72de2d3' -ClusterName 'DemoLocalCluster' -WebApplicationReplyUrl 'https://localhost:19007/Explorer/index.html' -Location china
-
-For Germany BlackForest:
-$Configobj = .\SetupApplications.ps1 -TenantId '80cd59e7-5f48-4325-8769-a47bc72de2d3' -ClusterName 'DemoLocalCluster' -WebApplicationReplyUrl 'https://localhost:19007/Explorer/index.html' -Location germany
