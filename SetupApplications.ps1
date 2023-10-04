@@ -21,9 +21,9 @@ Example: 'https://mycluster.contoso.com'
 Alternatively api:// format can be used which does not require a verified domain. Format: api://<tenant id>/<cluster name>
 Example: 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster'
 
-.PARAMETER WebApplicationReplyUrl
-Reply URL of web application. Format: https://<Domain name of cluster>:<Service Fabric Http gateway port>
-Example: 'https://mycluster.westus.cloudapp.azure.com:19080'
+.PARAMETER SpaApplicationReplyUrl
+Reply URL of spa application. Format: https://<Domain name of cluster>:<Service Fabric Http gateway port>
+Example: 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
 
 .PARAMETER NativeClientApplicationName
 Name of native client application representing client.
@@ -51,17 +51,17 @@ Use Force switch to force new authorization to acquire new token.
 Use Remove to remove AAD configuration for provided cluster.
 
 .EXAMPLE
-. Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' -WebApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080'
+. Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' -SpaApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
 
 Setup tenant with default settings generated from a friendly cluster name.
 
 .EXAMPLE
-. Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -WebApplicationName 'SFWeb' -WebApplicationUri 'https://mycluster.contoso.com' -WebApplicationReplyUrl 'https://mycluster.contoso:19080' -NativeClientApplicationName 'SFnative'
+. Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -WebApplicationName 'SFWeb' -WebApplicationUri 'https://mycluster.contoso.com' -SpaApplicationReplyUrl 'https://mycluster.contoso:19080/explorer/index.html' -NativeClientApplicationName 'SFnative'
 
 Setup tenant with explicit application settings.
 
 .EXAMPLE
-. $configObj = Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' -WebApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080'
+. $configObj = Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' -SpaApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
 
 Setup and save the setup result into a temporary variable to pass into SetupUser.ps1
 #>
@@ -85,7 +85,7 @@ Param
     [Parameter(ParameterSetName = 'Customize', Mandatory = $true)]
     [Parameter(ParameterSetName = 'Prefix', Mandatory = $true)]
     [String]
-    $WebApplicationReplyUrl,
+    $SpaApplicationReplyUrl,
 	
     [Parameter(ParameterSetName = 'Customize')]
     [String]
@@ -159,7 +159,7 @@ function main () {
     }
 }
 
-function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requiredResourceAccess) {
+function add-appRegistration($WebApplicationUri, $SpaApplicationReplyUrl, $requiredResourceAccess) {
     #Create Web Application
     write-host "creating app registration with $WebApplicationUri." -foregroundcolor yellow
     $webApp = @{}
@@ -181,8 +181,8 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
 
     $uri = [string]::Format($graphAPIFormat, 'applications')
     $webAppResource = @{
-        homePageUrl           = $WebApplicationReplyUrl
-        redirectUris          = @($WebApplicationReplyUrl)
+        homePageUrl           = $SpaApplicationReplyUrl
+        redirectUris          = @($SpaApplicationReplyUrl)
         implicitGrantSettings = @{
             enableAccessTokenIssuance = $false
             enableIdTokenIssuance     = $true
@@ -194,10 +194,10 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
             displayName            = $webApplicationName
             signInAudience         = $signInAudience
             identifierUris         = @($WebApplicationUri)
-            defaultRedirectUri     = $WebApplicationReplyUrl
+            defaultRedirectUri     = $SpaApplicationReplyUrl
             appRoles               = $appRole
             requiredResourceAccess = $requiredResourceAccess
-            web                    = $webAppResource
+            spa                    = $webAppResource
         }
     }
     else {
@@ -205,9 +205,9 @@ function add-appRegistration($WebApplicationUri, $WebApplicationReplyUrl, $requi
             displayName        = $webApplicationName
             signInAudience     = $signInAudience
             identifierUris     = @($WebApplicationUri)
-            defaultRedirectUri = $WebApplicationReplyUrl
+            defaultRedirectUri = $SpaApplicationReplyUrl
             appRoles           = $appRole
-            web                = $webAppResource
+            spa                = $webAppResource
         }
     }
 
@@ -424,7 +424,7 @@ function enable-AAD() {
     $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri
     if (!$webApp) {
         $webApp = add-appRegistration -WebApplicationUri $WebApplicationUri `
-            -WebApplicationReplyUrl $WebApplicationReplyUrl `
+            -SpaApplicationReplyUrl $SpaApplicationReplyUrl `
             -requiredResourceAccess $requiredResourceAccess
     }
 
