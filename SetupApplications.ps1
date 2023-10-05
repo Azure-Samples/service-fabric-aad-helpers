@@ -180,6 +180,14 @@ function add-appRegistration($WebApplicationUri, $SpaApplicationReplyUrl, $requi
         })
 
     $uri = [string]::Format($graphAPIFormat, 'applications')
+
+    $webAppResource = @{
+        implicitGrantSettings = @{
+            enableAccessTokenIssuance = $false
+            enableIdTokenIssuance     = $true
+        }
+    }
+    
     $spaAppResource = @{
         redirectUris          = @($SpaApplicationReplyUrl)
     }
@@ -193,6 +201,7 @@ function add-appRegistration($WebApplicationUri, $SpaApplicationReplyUrl, $requi
             appRoles               = $appRole
             requiredResourceAccess = $requiredResourceAccess
             spa                    = $spaAppResource
+            web                    = $webAppResource
         }
     }
     else {
@@ -203,6 +212,7 @@ function add-appRegistration($WebApplicationUri, $SpaApplicationReplyUrl, $requi
             defaultRedirectUri = $SpaApplicationReplyUrl
             appRoles           = $appRole
             spa                = $spaAppResource
+            web                = $webAppResource
         }
     }
 
