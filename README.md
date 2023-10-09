@@ -82,6 +82,18 @@ $Configobj = .\SetupApplications.ps1 -TenantId '<tenant_id>' -ClusterName '<clus
 
 Refer to *CleanupApplications.ps1* and *CleanupUser.ps1* scripts for additional options and examples.
 
+
+### Update an existing Azure Ad Application
+Update an existing Azure Ad Application to migrate the web redirect URIs to SPA redirect URIs.
+This will update the Application registration by moving any web redirect URIs that contain the port(by default 19080) to SPA redirect URIs and ensuring they end with /Explorer/index.html
+```PowerShell
+.\UpdateApplication.ps1.ps1 -webApplicationId 86d35e4b-1aa6-4f3c-b0dc-6f007a1f49e8
+
+# Update for clusters not using standard 19080 http port 
+.\UpdateApplication.ps1.ps1 -webApplicationId 86d35e4b-1aa6-4f3c-b0dc-6f007a1f49e8 -httpPort 19007
+
+```
+
 ## Resources
 
 - [Service Fabric: Set up Azure Active Directory for client authentication](https://docs.microsoft.com/en-us/azure/service-fabric/service-fabric-cluster-creation-setup-aad)
