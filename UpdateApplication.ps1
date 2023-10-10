@@ -20,10 +20,6 @@ $headers = $null
 . "$PSScriptRoot\Common.ps1"
 $graphAPIFormat = $resourceUrl + "/v1.0/{0}"
 $global:ConfigObj = @{}
-$sleepSeconds = 5
-$msGraphUserReadAppId = '00000003-0000-0000-c000-000000000000'
-$msGraphUserReadId = 'e1fe6dd8-ba31-4d61-89e7-88639da4683d'
-
 
 function main () {
     try {
@@ -63,8 +59,7 @@ function update-Application() {
         if ($replyUri.Port -eq $httpPort) {
 
             # rewrite to use the new stricter format expectation
-            $newUri = $replyUri.Authority + "/Explorer/index.html"
-           
+            $newUri = $replyUri.Scheme + "://" +  $replyUri.Authority + "/Explorer/index.html"
             #dont include duplicate URIs otherwise the request will fail
             if (!($spaUrisToUpdate.Contains($newUri))) {
                 $newSpaUris += $newUri
