@@ -357,3 +357,13 @@ if ($ClusterName) {
     $WebApplicationName = $ClusterName + "_Cluster"
     $NativeClientApplicationName = $ClusterName + "_Client"
 }
+
+if (!$global:ConfigObj) {
+    $global:ConfigObj = @{
+        TenantId           = $TenantId
+        ClusterName        = $ClusterName
+        NativeClientAppId  = $null
+        ServicePrincipalId = $null
+        WebAppId           = $null
+    }
+}
