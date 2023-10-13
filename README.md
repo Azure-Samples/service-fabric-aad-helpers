@@ -91,12 +91,12 @@ The webApplicationId can be found in azure portal by checking the Application (c
 
 # The WhatIf flag will show what web redirect URIs would be removed and SPA redirect URIs would be created without making the change.
 # This can be helpful to see what changes would be made prior to running it.
-.\UpdateApplication.ps1.ps1 -WebApplicationId '<web_app_id>' -TenantId '<tenant_id>' -WhatIf
+.\UpdateApplication.ps1 -WebApplicationId '<web_app_id>' -TenantId '<tenant_id>' -WhatIf
 
-.\UpdateApplication.ps1.ps1 -WebApplicationId '<web_app_id>' -TenantId '<tenant_id>'
+.\UpdateApplication.ps1 -WebApplicationId '<web_app_id>' -TenantId '<tenant_id>'
 
 # Update for clusters not using standard 19080 http port 
-.\UpdateApplication.ps1.ps1 -WebApplicationId '<web_app_id>' -TenantId '<tenant_id>' -HttpPort 19007
+.\UpdateApplication.ps1 -WebApplicationId '<web_app_id>' -TenantId '<tenant_id>' -HttpPort 19007
 
 ```
 
