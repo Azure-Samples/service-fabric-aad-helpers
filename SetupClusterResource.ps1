@@ -16,7 +16,7 @@ v 1.1
 [cmdletbinding()]
 param(
     [Parameter(ParameterSetName = 'customobj', Mandatory = $true)]
-    [hashtable]$configObj = @{},
+    [hashtable]$ConfigObj = @{},
 
     [Parameter(ParameterSetName = 'values', Mandatory = $true)]
     [string]$tenantId = '', # guid
@@ -53,12 +53,12 @@ param(
 
 $PSModuleAutoLoadingPreference = 2
 
-if ($configObj) {
-    write-host "using configobj"
-    $tenantId = $configObj.TenantId
-    $clusterApplication = $configObj.WebAppId
-    $clientApplication = $configObj.NativeClientAppId
-    $clusterName = $configObj.ClusterName
+if ($ConfigObj) {
+    write-host "using ConfigObj"
+    $tenantId = $ConfigObj.TenantId
+    $clusterApplication = $ConfigObj.WebAppId
+    $clientApplication = $ConfigObj.NativeClientAppId
+    $clusterName = $ConfigObj.ClusterName
 }
 
 $azureActiveDirectory = @{ 

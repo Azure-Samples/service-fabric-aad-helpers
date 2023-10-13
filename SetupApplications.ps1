@@ -61,7 +61,7 @@ Setup tenant with default settings generated from a friendly cluster name.
 Setup tenant with explicit application settings.
 
 .EXAMPLE
-. $configObj = Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' -WebApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080'
+. $ConfigObj = Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' -WebApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080'
 
 Setup and save the setup result into a temporary variable to pass into SetupUser.ps1
 #>
@@ -378,8 +378,8 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
 
 function enable-AAD() {
     Write-Host 'TenantId = ' $TenantId
-    $configObj.ClusterName = $clusterName
-    $configObj.TenantId = $TenantId
+    $ConfigObj.ClusterName = $clusterName
+    $ConfigObj.TenantId = $TenantId
     $webApp = $null
 
     if (!$webApplicationName) {
@@ -417,7 +417,7 @@ function enable-AAD() {
         write-warning "removing native app registration"
         $result = $result -and (remove-nativeClient -nativeClientApplicationName $NativeClientApplicationName)
         write-host "removal complete result:$result" -ForegroundColor Green
-        return $configObj
+        return $ConfigObj
     }
     
     # check / add app registration
@@ -429,7 +429,7 @@ function enable-AAD() {
     }
 
     assert-notNull $webApp 'Web Application Creation Failed'
-    $configObj.WebAppId = $webApp.appId
+    $ConfigObj.WebAppId = $webApp.appId
     Write-Host "Web Application Created: $($webApp.appId)"
 
     # check / add oauth user_impersonation permissions
@@ -447,7 +447,7 @@ function enable-AAD() {
     }
     assert-notNull $servicePrincipal 'service principal configuration failed'
     Write-Host "Service Principal Created: $($servicePrincipal.appId)" -ForegroundColor Green
-    $configObj.ServicePrincipalId = $servicePrincipal.Id
+    $ConfigObj.ServicePrincipalId = $servicePrincipal.Id
 
     # check / add native app
     $nativeApp = get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri
@@ -456,7 +456,7 @@ function enable-AAD() {
     }
     assert-notNull $nativeApp 'Native Client Application Creation Failed'
     Write-Host "Native Client Application Created: $($nativeApp.appId)"  -ForegroundColor Green
-    $configObj.NativeClientAppId = $nativeApp.appId
+    $ConfigObj.NativeClientAppId = $nativeApp.appId
 
     # check / add native app service principal
     $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp
@@ -472,17 +472,17 @@ function enable-AAD() {
 
     assert-notNull $servicePrincipalAAD 'aad app service principal configuration failed'
     Write-Host "AAD Application Configured: $($servicePrincipalAAD)"  -ForegroundColor Green
-    write-host "configobj: $($configObj|convertto-json)"
+    write-host "ConfigObj: $($ConfigObj|convertto-json)"
 
     #ARM template AAD resource
     write-host "-----ARM template-----"
     write-host "`"azureActiveDirectory`": $(@{
-        tenantId           = $configObj.tenantId
-        clusterApplication = $configObj.WebAppId
-        clientApplication  = $configObj.NativeClientAppId
+        tenantId           = $ConfigObj.tenantId
+        clusterApplication = $ConfigObj.WebAppId
+        clientApplication  = $ConfigObj.NativeClientAppId
     } | ConvertTo-Json)," -ForegroundColor Cyan
 
-    return $configObj
+    return $ConfigObj
 }
 
 function get-appRegistration($WebApplicationUri) {
@@ -568,7 +568,7 @@ function remove-appRegistration($WebApplicationUri) {
         return $true
     } 
 
-    $configObj.WebAppId = $webApp.appId
+    $ConfigObj.WebAppId = $webApp.appId
     $uri = [string]::Format($graphAPIFormat, "applications/$($webApp.id)")
     $webApp = (invoke-graphApi -uri $uri -method 'delete')
 
@@ -594,7 +594,7 @@ function remove-nativeClient($NativeClientApplicationName) {
     $nativeApp = (invoke-graphApi -uri $uri -method 'delete')
 
     if ($nativeApp) {
-        $configObj.NativeClientAppId = $nativeApp.appId
+        $ConfigObj.NativeClientAppId = $nativeApp.appId
 
         $null = wait-forResult -functionPointer (get-item function:\invoke-graphApi) `
             -message "waiting for native client delete to complete..." `
@@ -613,7 +613,7 @@ function remove-servicePrincipal() {
     if ($webApp) {
         $servicePrincipal = get-servicePrincipal -webApp $webApp
         if ($servicePrincipal) {
-            $configObj.ServicePrincipalId = $servicePrincipal.Id
+            $ConfigObj.ServicePrincipalId = $servicePrincipal.Id
             $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipal.id)")
             $result = $result -and (invoke-graphApi -uri $uri -method 'delete')
 

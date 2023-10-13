@@ -35,7 +35,7 @@ This repo provides the following scripts for Azure AD:
 Run **SetupApplications.ps1** to create two Azure AD applications (web and native applications) to control access to the cluster, storing the output into a variable to reuse when [creating Azure AD users](#create-azure-ad-users).
 
 ```PowerShell
-$Configobj = .\SetupApplications.ps1 -TenantId '<tenant_id>' -ClusterName '<cluster_name>' -WebApplicationReplyUrl 'https://<cluster_domain>:19080/Explorer' -WebApplicationUri 'api://<tenant_id>/<cluster_name>' -AddResourceAccess
+$ConfigObj = .\SetupApplications.ps1 -TenantId '<tenant_id>' -ClusterName '<cluster_name>' -WebApplicationReplyUrl 'https://<cluster_domain>:19080/Explorer' -WebApplicationUri 'api://<tenant_id>/<cluster_name>' -AddResourceAccess
 ```
 
 - **TenantId**: You can find this by executing the PowerShell command `Get-AzureSubscription`.
@@ -57,11 +57,11 @@ Running the script will prompt you to sign in to an account with admin privilege
 
 ### Create Azure AD users
 
-Run **SetupUser.ps1** to create *read-only* and *admin* user roles for your cluster, using the `$Configobj` returned when [creating your Azure AD applications](#create-azure-ad-applications). For example:
+Run **SetupUser.ps1** to create *read-only* and *admin* user roles for your cluster, using the `$ConfigObj` returned when [creating your Azure AD applications](#create-azure-ad-applications). For example:
 
 ```PowerShell
-.\SetupUser.ps1 -ConfigObj $Configobj -UserName 'TestUser' -Password 'P@ssword!123'
-.\SetupUser.ps1 -ConfigObj $Configobj -UserName 'TestAdmin' -Password 'P@ssword!123' -IsAdmin
+.\SetupUser.ps1 -ConfigObj $ConfigObj -UserName 'TestUser' -Password 'P@ssword!123'
+.\SetupUser.ps1 -ConfigObj $ConfigObj -UserName 'TestAdmin' -Password 'P@ssword!123' -IsAdmin
 ```
 
 Refer to the *SetupUser.ps1* script source for additional options and examples.
@@ -71,13 +71,13 @@ Refer to the *SetupUser.ps1* script source for additional options and examples.
 Run same scripts with '-remove' switch if the Azure AD applications or user configurations need to be removed.
 
 ```PowerShell
-$Configobj = .\SetupApplications.ps1 -TenantId '<tenant_id>' -ClusterName '<cluster_name>' -WebApplicationReplyUrl 'https://<cluster_domain>:19080/Explorer' -WebApplicationUri 'api://<tenant_id>/<cluster_name>' -AddResourceAccess -remove
+$ConfigObj = .\SetupApplications.ps1 -TenantId '<tenant_id>' -ClusterName '<cluster_name>' -WebApplicationReplyUrl 'https://<cluster_domain>:19080/Explorer' -WebApplicationUri 'api://<tenant_id>/<cluster_name>' -AddResourceAccess -remove
 
 # remove configuration from user
-.\SetupUser.ps1 -ConfigObj $Configobj -UserName 'TestUser' -Password 'P@ssword!123' -remove
+.\SetupUser.ps1 -ConfigObj $ConfigObj -UserName 'TestUser' -Password 'P@ssword!123' -remove
 
 # remove user
-.\SetupUser.ps1 -ConfigObj $Configobj -UserName 'TestUser' -Password 'P@ssword!123' -remove -force
+.\SetupUser.ps1 -ConfigObj $ConfigObj -UserName 'TestUser' -Password 'P@ssword!123' -remove -force
 ```
 
 Refer to *CleanupApplications.ps1* and *CleanupUser.ps1* scripts for additional options and examples.
