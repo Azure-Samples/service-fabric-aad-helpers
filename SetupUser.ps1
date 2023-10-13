@@ -130,7 +130,7 @@ $sleepSeconds = 5
 function main () {
     try {
         if ($logFile) {
-            Start-Transcript -path $logFile -Force
+            Start-Transcript -path $logFile -Force | out-null
         }
 
         enable-AADUser
@@ -141,7 +141,7 @@ function main () {
     }
     finally {
         if ($logFile) {
-            Stop-Transcript
+            Stop-Transcript | out-null
         }
     }
 }
