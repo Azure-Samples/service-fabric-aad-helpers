@@ -1,18 +1,24 @@
 [cmdletbinding()]
 Param
 (
-    [Parameter(ParameterSetName = 'Customize')]	
+    [Parameter(ParameterSetName = 'Customize', Mandatory = $true)]	
     [String]
-    $webApplicationId,
+    $WebApplicationId,
     [Parameter(ParameterSetName = 'Customize')]
     [int]
     $timeoutMin = 5,
     [Parameter(ParameterSetName = 'Customize')]
     [int]
-    $httpPort = 19080,
+    $HttpPort = 19080,
     [Parameter(ParameterSetName = 'Customize')]
     [string]
-    $logFile
+    $logFile,
+    [Parameter(ParameterSetName = 'Customize', Mandatory = $true)]
+    [String]
+    $TenantId,
+    [Parameter(ParameterSetName = 'Customize')]
+    [Switch]
+    $WhatIf
 )
 
 
@@ -41,7 +47,7 @@ function main () {
 }
 
 function update-Application() {
-    $webApplication = get-appRegistration -WebApplicationUri $webApplicationId
+    $webApplication = get-appRegistration -WebApplicationUri $WebApplicationId
     assert-notNull $webApplication 'web application not found'
 
     # web URIs that should be removed from the web URI redirects
@@ -56,10 +62,9 @@ function update-Application() {
     foreach ($uri in $webApplication.web.redirectUris) {
         $replyUri = [Uri]::new($uri)
         #search critera is any redirect URIs that contain the port from script called
-        if ($replyUri.Port -eq $httpPort) {
-
+        if ($replyUri.Port -eq $HttpPort) {
             # rewrite to use the new stricter format expectation
-            $newUri = $replyUri.Scheme + "://" +  $replyUri.Authority + "/Explorer/index.html"
+            $newUri = $replyUri.Scheme + "://" + $replyUri.Authority + "/Explorer/index.html"
             #dont include duplicate URIs otherwise the request will fail
             if (!($spaUrisToUpdate.Contains($newUri))) {
                 $newSpaUris += $newUri
@@ -88,24 +93,36 @@ function update-Application() {
         }
     }
 
-    Write-Host -ForegroundColor yellow `Attempting to update $newSpaUris.Length from web redirect uris to spa redirect uris` 
+    if ($WhatIf) {
+        Write-Host -ForegroundColor yellow `The following $webUrisToRemove.Length Web Redirect URIs would be moved to spa redirect uris` 
+        foreach ($spa in $webUrisToRemove) {
+            Write-Host $spa
+        }  
 
-    update-appRegistration -id $webApplication.id -webAppUpdate $webApp
-
-    if ($global:graphStatusCode -eq 204) {
-        Write-Host -ForegroundColor yellow `Completed moving $newSpaUris.Length web redirect uris to spa redirect uris` 
+        Write-Host -ForegroundColor yellow ` The following $newSpaUris.Length new spa redirect uris would be added` 
         foreach ($spa in $newSpaUris) {
             Write-Host $spa
         }  
     }
     else {
-        Write-Host -ForegroundColor Red `There was an issue updating the app registration`
+        Write-Host -ForegroundColor yellow `Attempting to update $newSpaUris.Length from web redirect uris to spa redirect uris` 
+
+        update-appRegistration -id $webApplication.id -webAppUpdate $webApp
+
+        if ($global:graphStatusCode -eq 204) {
+            Write-Host -ForegroundColor yellow `Completed moving $newSpaUris.Length web redirect uris to spa redirect uris` 
+            foreach ($spa in $newSpaUris) {
+                Write-Host $spa
+            }  
+        }
+        else {
+            Write-Host -ForegroundColor Red `There was an issue updating the app registration`
+        }
     }
 }
 
 function update-appRegistration($id, $webAppUpdate) {
     $uri = [string]::Format($graphAPIFormat, "applications/$id")
-   
     invoke-graphApi -uri $uri -method 'patch' -body $webAppUpdate
 }
 
@@ -114,6 +131,10 @@ function get-appRegistration($WebApplicationUri) {
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"appId:$WebApplicationUri`"")
    
     $webApp = (invoke-graphApi -uri $uri -method 'get').value
+
+    if (!$webApp) {
+        return $null
+    }
     return $webApp[0]
 }
 
