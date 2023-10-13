@@ -7,12 +7,12 @@ version: 2.0.3
 
 #>
 
-function main () {
+function main ([guid]$tenantId = $null) {
     if ($headers) {
         return
     }
 
-    return get-RESTHeaders
+    return get-RESTHeaders -tenantId $tenantId
 }
 
 function assert-notNull($obj, $msg) {
@@ -74,7 +74,7 @@ function get-cloudInstance() {
     return $isCloudInstance
 }
 
-function get-restAuthGraph($tenantId, $clientId, $scope, $uri = 'https://login.microsoftonline.com') {
+function get-restAuthGraph([guid]$tenantId, [guid]$clientId, $scope, $uri = 'https://login.microsoftonline.com') {
     # authenticate to Graph using device code
 
     write-host "auth request" -ForegroundColor Green
@@ -103,14 +103,14 @@ function get-restAuthGraph($tenantId, $clientId, $scope, $uri = 'https://login.m
     return $global:authresult
 }
 
-function get-RESTHeaders() {
+function get-RESTHeaders([guid]$tenantId = $null) {
     $token = $null
     if (get-cloudInstance) {
         $token = get-RESTHeadersCloud
     }
     
     if (!$token) {
-        $token = get-RESTHeadersGraph -tenantId $TenantId
+        $token = get-RESTHeadersGraph -tenantId $tenantId
     }
     
     $authHeader = @{
@@ -141,7 +141,8 @@ function get-RESTHeadersCloud() {
     }
 }
 
-function get-RESTHeadersGraph($tenantId) {
+function get-RESTHeadersGraph([guid]$tenantId) {
+    assert-notNull -obj $tenantId -msg 'tenantId required'
     # Use common client 
     $clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e' # well-known ps graph client id generated on connect
     $grantType = 'urn:ietf:params:oauth:grant-type:device_code' #'client_credentials', #'authorization_code'
@@ -152,7 +153,7 @@ function get-RESTHeadersGraph($tenantId) {
     return $accessToken
 }
 
-function get-RESTTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $scope, $uri = 'https://login.microsoftonline.com') {
+function get-RESTTokenGraph([guid]$tenantId, [string]$grantType, [guid]$clientId, [string]$clientSecret, [string]$scope, $uri = 'https://login.microsoftonline.com') {
     # requires app registration
     # will retry on device code until complete
 
@@ -350,7 +351,7 @@ switch ($Location) {
 
 $global:graphStatusCode = $null
 $sleepSeconds = 1
-$headers = main
+$headers = main -tenantId $TenantId
 $global:defaultHeaders = $headers
 
 if ($ClusterName) {
