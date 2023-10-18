@@ -35,14 +35,14 @@ This repo provides the following scripts for Azure AD:
 Run **SetupApplications.ps1** to create two Azure AD applications (web and native applications) to control access to the cluster, storing the output into a variable to reuse when [creating Azure AD users](#create-azure-ad-users).
 
 ```PowerShell
-$Configobj = .\SetupApplications.ps1 -TenantId '<tenant_id>' -ClusterName '<cluster_name>' -WebApplicationReplyUrl 'https://<cluster_domain>:19080/Explorer' -WebApplicationUri 'api://<tenant_id>/<cluster_name>' -AddResourceAccess
+$Configobj = .\SetupApplications.ps1 -TenantId '<tenant_id>' -ClusterName '<cluster_name>' -SpaApplicationReplyUrl 'https://<cluster_domain>:19080/Explorer' -WebApplicationUri 'api://<tenant_id>/<cluster_name>' -AddResourceAccess
 ```
 
 - **TenantId**: You can find this by executing the PowerShell command `Get-AzureSubscription`.
 
 - **ClusterName**: This is used to prefix the Azure AD applications created by the script. It does not need to match the actual cluster name. It is provided to help you map Azure AD artifacts to their Service Fabric cluster.
 
-- **WebApplicationReplyUrl**: The endpoint Azure AD returned to your users after signing in. Set this to the Service Fabric Explorer for your cluster, which by default is at *https://<cluster_domain>:19080/Explorer*
+- **SpaApplicationReplyUrl**: The endpoint Azure AD returned to your users after signing in. Set this to the Service Fabric Explorer for your cluster, which by default is at *https://<cluster_domain>:19080/Explorer/index.html*
 
 - **WebApplicationUri**: Application ID URI of web application. If using https:// format, the domain has to be a verified domain. 
 Format: https://<Domain name of cluster>
@@ -71,7 +71,7 @@ Refer to the *SetupUser.ps1* script source for additional options and examples.
 Run same scripts with '-remove' switch if the Azure AD applications or user configurations need to be removed.
 
 ```PowerShell
-$Configobj = .\SetupApplications.ps1 -TenantId '<tenant_id>' -ClusterName '<cluster_name>' -WebApplicationReplyUrl 'https://<cluster_domain>:19080/Explorer' -WebApplicationUri 'api://<tenant_id>/<cluster_name>' -AddResourceAccess -remove
+$Configobj = .\SetupApplications.ps1 -TenantId '<tenant_id>' -ClusterName '<cluster_name>' -SpaApplicationReplyUrl 'https://<cluster_domain>:19080/Explorer' -WebApplicationUri 'api://<tenant_id>/<cluster_name>' -AddResourceAccess -remove
 
 # remove configuration from user
 .\SetupUser.ps1 -ConfigObj $Configobj -UserName 'TestUser' -Password 'P@ssword!123' -remove
@@ -81,6 +81,24 @@ $Configobj = .\SetupApplications.ps1 -TenantId '<tenant_id>' -ClusterName '<clus
 ```
 
 Refer to *CleanupApplications.ps1* and *CleanupUser.ps1* scripts for additional options and examples.
+
+
+### Update an existing Azure Ad Application
+Update an existing Azure Ad Application to migrate the web redirect URIs to SPA redirect URIs.
+This will update the Application registration by moving any web redirect URIs that contain the port(by default 19080) to SPA redirect URIs and ensuring they end with /Explorer/index.html
+The webApplicationId can be found in azure portal by checking the Application (client) ID section of the app registration essentials or the ClusterApplication section of your cluster's  azureActiveryDirectory section of your arm template.
+```PowerShell
+
+# The WhatIf flag will show what web redirect URIs would be removed and SPA redirect URIs would be created without making the change.
+# This can be helpful to see what changes would be made prior to running it.
+.\UpdateApplication.ps1 -WebApplicationId '<web_app_id>' -TenantId '<tenant_id>' -WhatIf
+
+.\UpdateApplication.ps1 -WebApplicationId '<web_app_id>' -TenantId '<tenant_id>'
+
+# Update for clusters not using standard 19080 http port 
+.\UpdateApplication.ps1 -WebApplicationId '<web_app_id>' -TenantId '<tenant_id>' -HttpPort 19007
+
+```
 
 ## Resources
 
