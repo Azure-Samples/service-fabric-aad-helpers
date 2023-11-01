@@ -30,7 +30,7 @@ $global:ConfigObj = @{}
 function main () {
     try {
         if ($logFile) {
-            Start-Transcript -path $logFile -Force
+            Start-Transcript -path $logFile -Force | Out-Null
         }
 
         update-Application
@@ -41,7 +41,7 @@ function main () {
     }
     finally {
         if ($logFile) {
-            Stop-Transcript
+            Stop-Transcript | Out-Null
         }
     }
 }
