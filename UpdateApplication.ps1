@@ -22,10 +22,8 @@ Param
 )
 
 
-$headers = $null
 . "$PSScriptRoot\Common.ps1"
-$graphAPIFormat = $resourceUrl + "/v1.0/{0}"
-$global:ConfigObj = @{}
+$graphAPIFormat = $global:ConfigObj.ResourceUrl + "/v1.0/{0}"
 
 function main () {
     try {
@@ -36,8 +34,7 @@ function main () {
         update-Application
     }
     catch [Exception] {
-        $errorString = "exception: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"
-        write-error $errorString
+        write-errorMessage $psitem
     }
     finally {
         if ($logFile) {

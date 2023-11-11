@@ -116,13 +116,10 @@ Param
     $force
 )
 
-if ($ConfigObj) {
-    $TenantId = $ConfigObj.TenantId
-}
-
-$headers = $null
+# load common functions
 . "$PSScriptRoot\Common.ps1"
-$graphAPIFormat = $resourceUrl + "/v1.0/" + $TenantId + "/{0}"
+
+$graphAPIFormat = $global:config.ResourceUrl + "/v1.0/" + $global:config.TenantId + "/{0}"
 $servicePrincipalId = $null
 $WebApplicationId = $null
 $sleepSeconds = 5
@@ -133,52 +130,16 @@ function main () {
             Start-Transcript -path $logFile -Force | Out-Null
         }
 
-        enable-AADUser
+        setup-User
     }
     catch [Exception] {
-        $errorString = "exception: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"
-        write-error $errorString
+        write-errorMessage $psitem
     }
     finally {
         if ($logFile) {
             Stop-Transcript | Out-Null
         }
     }
-}
-
-function enable-AADUser() {
-    Write-Host 'TenantId = ' $TenantId
-
-    if ($ConfigObj) {
-        $WebApplicationId = $ConfigObj.WebAppId
-        $servicePrincipalId = $ConfigObj.ServicePrincipalId
-    }
-
-    # get verified domain
-    $domain = get-verifiedDomain
-    assert-notNull $domain 'domain is not found'
-
-    # set user name
-    $userName = set-userName
-
-    # cleanup
-    if ($remove) {
-        return (remove-user -userName $userName -domain $domain)
-    }
-
-    # get service principal id
-    $servicePrincipalId = get-servicePrincipalId -servicePrincipalId $servicePrincipalId
-    assert-notNull $servicePrincipalId 'Service principal of web application is not found'
-
-    # get app roles
-    $appRoles = get-appRoles
-    assert-notNull $appRoles 'AppRoles of web application is not found'
-
-    # check / create user
-    $newUser = add-user -userName $userName -domain $domain -appRoles $appRoles
-    assert-notNull $newUser "unable to create new user $userName"
-    write-host "user $userName created successfully"
-    return $newUser
 }
 
 function add-roleAssignment($userId, $roleId, $servicePrincipalId) {
@@ -360,6 +321,41 @@ function remove-user($userName, $domain) {
     }
 
     return $result
+}
+
+function setup-User() {
+    Write-Host 'TenantId = ' $TenantId
+
+    if ($ConfigObj) {
+        $WebApplicationId = $ConfigObj.WebAppId
+        $servicePrincipalId = $ConfigObj.ServicePrincipalId
+    }
+
+    # get verified domain
+    $domain = get-verifiedDomain
+    assert-notNull $domain 'domain is not found'
+
+    # set user name
+    $userName = set-userName
+
+    # cleanup
+    if ($remove) {
+        return (remove-user -userName $userName -domain $domain)
+    }
+
+    # get service principal id
+    $servicePrincipalId = get-servicePrincipalId -servicePrincipalId $servicePrincipalId
+    assert-notNull $servicePrincipalId 'Service principal of web application is not found'
+
+    # get app roles
+    $appRoles = get-appRoles
+    assert-notNull $appRoles 'AppRoles of web application is not found'
+
+    # check / create user
+    $newUser = add-user -userName $userName -domain $domain -appRoles $appRoles
+    assert-notNull $newUser "unable to create new user $userName"
+    write-host "user $userName created successfully"
+    return $newUser
 }
 
 function set-userName() {
