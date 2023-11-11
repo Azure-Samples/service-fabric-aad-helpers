@@ -120,7 +120,6 @@ function get-restAuthGraph([guid]$tenantId, [guid]$clientId, $scope, $uri = $glo
 
     write-host "auth request" -ForegroundColor Green
     $error.clear()
-    $authString = $uri
     $uri = "$uri/$tenantId/oauth2/v2.0/devicecode"
 
     $Body = @{
@@ -132,7 +131,7 @@ function get-restAuthGraph([guid]$tenantId, [guid]$clientId, $scope, $uri = $glo
         ContentType = 'application/x-www-form-urlencoded'
         Body        = $Body
         Method      = 'post'
-        URI         = $authString
+        URI         = $uri
     }
 
     Write-Verbose ($params | convertto-json)
@@ -210,7 +209,7 @@ function get-RESTTokenGraph([guid]$tenantId, [string]$grantType, [guid]$clientId
     }
 
     if ($grantType -ieq 'urn:ietf:params:oauth:grant-type:device_code') {
-        $global:authResult = get-restAuthGraph -tenantId $tenantId -clientId $clientId -scope $scope -uri $uri
+        $global:authResult = get-restAuthGraph -tenantId $tenantId -clientId $clientId -scope $scope -uri $authString
         $Body = @{
             'client_id'   = $clientId
             'device_code' = $global:authresult.device_code
@@ -225,7 +224,7 @@ function get-RESTTokenGraph([guid]$tenantId, [string]$grantType, [guid]$clientId
         }
     }
     elseif ($grantType -ieq 'authorization_code') {
-        $global:authResult = get-restAuthGraph -tenantId $tenantId -clientId $clientId -scope $scope -uri $uri
+        $global:authResult = get-restAuthGraph -tenantId $tenantId -clientId $clientId -scope $scope -uri $authString
         $Body = @{
             'client_id'  = $clientId
             'code'       = $global:authresult.code
@@ -237,7 +236,7 @@ function get-RESTTokenGraph([guid]$tenantId, [string]$grantType, [guid]$clientId
         Headers = $headers
         Body    = $Body
         Method  = 'Post'
-        URI     = $authString
+        URI     = $uri
     }
 
     write-verbose ($params | convertto-json)
@@ -257,7 +256,7 @@ function get-RESTTokenGraph([guid]$tenantId, [string]$grantType, [guid]$clientId
             return $global:accessToken
         }
         catch [System.Exception] {
-            $errorMessage = ($_ | convertfrom-json)
+            $errorMessage = ($psitem | convertfrom-json)
 
             if ($errorMessage -and ($errorMessage.error -ieq 'authorization_pending')) {
                 write-host "waiting for device token result..." -ForegroundColor Yellow
@@ -318,7 +317,7 @@ function invoke-graphApiCall($uri, $headers = $global:config.Headers, $body = ''
             Write-Warning "invoke-graphApiCall response status: $global:graphStatusCode"
         }
 
-        if(!$global:graphStatusCode) {
+        if (!$global:graphStatusCode) {
             # not a web exception
             throw $psitem.Exception
         }
@@ -386,13 +385,11 @@ function write-errorMessage($exceptionRecord) {
             $($exceptionRecord.Exception.Message)
             
             $($exceptionRecord.ScriptStackTrace)
-
-            ConfigObj: 
-            $($global:ConfigObj | convertto-json)
             
             use -force switch to force new authorization to acquire new token.
         "
-        write-error $errorString
+    write-error $errorString
+    write-verbose  ($global:ConfigObj | convertto-json)
 }
 
 if (!$global:ConfigObj) {
