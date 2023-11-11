@@ -143,7 +143,7 @@ $msGraphUserReadId = 'e1fe6dd8-ba31-4d61-89e7-88639da4683d'
 function main () {
     try {
         if ($logFile) {
-            Start-Transcript -path $logFile -Force | out-null
+            Start-Transcript -path $logFile -Force | Out-Null
         }
 
         enable-AAD
@@ -154,7 +154,7 @@ function main () {
     }
     finally {
         if ($logFile) {
-            Stop-Transcript | out-null
+            Stop-Transcript | Out-Null
         }
     }
 }
