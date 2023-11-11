@@ -6,7 +6,7 @@ Param
     $WebApplicationId,
     [Parameter(ParameterSetName = 'Customize')]
     [int]
-    $timeoutMin = 5,
+    $TimeoutMin = 5,
     [Parameter(ParameterSetName = 'Customize')]
     [int]
     $HttpPort = 19080,
@@ -21,9 +21,9 @@ Param
     $WhatIf
 )
 
-
+# load common functions
 . "$PSScriptRoot\Common.ps1"
-$graphAPIFormat = $global:ConfigObj.ResourceUrl + "/v1.0/{0}"
+$graphAPIFormat = $global:ConfigObj.GraphAPIFormat
 
 function main () {
     try {

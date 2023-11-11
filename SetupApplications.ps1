@@ -75,7 +75,7 @@ Param
 
     [Parameter(ParameterSetName = 'Customize')]	
     [String]
-    $webApplicationName,
+    $WebApplicationName,
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
@@ -110,40 +110,40 @@ Param
     [Parameter(ParameterSetName = 'Prefix')]
     [String]
     [ValidateSet('AzureADMyOrg', 'AzureADMultipleOrgs', 'AzureADandPersonalMicrosoftAccount')]
-    $signInAudience = 'AzureADMyOrg',
+    $SignInAudience = 'AzureADMyOrg',
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
     [int]
-    $timeoutMin = 5,
+    $TimeoutMin = 5,
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
     [string]
-    $logFile,
+    $LogFile,
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
-    [Switch]$force,
+    [Switch]$Force,
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
     [Switch]
-    $remove
+    $Remove
 )
 
 # load common functions
 . "$PSScriptRoot\Common.ps1"
 
-$graphAPIFormat = $global:ConfigObj.ResourceUrl + "/v1.0/" + $global:ConfigObj.TenantId + "/{0}"
+$graphAPIFormat = $global:ConfigObj.GraphAPIFormat
 $sleepSeconds = 5
 $msGraphUserReadAppId = '00000003-0000-0000-c000-000000000000'
 $msGraphUserReadId = 'e1fe6dd8-ba31-4d61-89e7-88639da4683d'
 
 function main () {
     try {
-        if ($logFile) {
-            Start-Transcript -path $logFile -Force | Out-Null
+        if ($LogFile) {
+            Start-Transcript -path $LogFile -Force | Out-Null
         }
 
         setup-Applications
@@ -152,7 +152,7 @@ function main () {
         write-errorMessage $psitem
     }
     finally {
-        if ($logFile) {
+        if ($LogFile) {
             Stop-Transcript | Out-Null
         }
     }
@@ -194,7 +194,7 @@ function add-appRegistration($WebApplicationUri, $SpaApplicationReplyUrl, $requi
     if ($AddResourceAccess) {
         $webApp = @{
             displayName            = $webApplicationName
-            signInAudience         = $signInAudience
+            signInAudience         = $SignInAudience
             identifierUris         = @($WebApplicationUri)
             defaultRedirectUri     = $SpaApplicationReplyUrl
             appRoles               = $appRole
@@ -206,7 +206,7 @@ function add-appRegistration($WebApplicationUri, $SpaApplicationReplyUrl, $requi
     else {
         $webApp = @{
             displayName        = $webApplicationName
-            signInAudience     = $signInAudience
+            signInAudience     = $SignInAudience
             identifierUris     = @($WebApplicationUri)
             defaultRedirectUri = $SpaApplicationReplyUrl
             appRoles           = $appRole
@@ -219,7 +219,7 @@ function add-appRegistration($WebApplicationUri, $SpaApplicationReplyUrl, $requi
     $webApp = invoke-graphApi -retry -uri $uri -body $webApp -method 'post'
 
     if ($webApp) {
-        $stopTime = set-stopTime $timeoutMin
+        $stopTime = set-stopTime $TimeoutMin
         
         while (!($webApp.api.oauth2PermissionScopes.gethashcode())) {
             $webApp = wait-forResult -functionPointer (get-item function:\get-appRegistration) `
@@ -253,7 +253,7 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
             redirectUris = @("urn:ietf:wg:oauth:2.0:oob") 
         }
         displayName            = $NativeClientApplicationName
-        signInAudience         = $signInAudience
+        signInAudience         = $SignInAudience
         isFallbackPublicClient = $true
         requiredResourceAccess = $nativeAppResourceAccess
     }
@@ -365,7 +365,7 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
     assert-notNull $result "aad app service principal oauth permissions $scope configuration failed"
 
     if ($result) {
-        $stopTime = set-stopTime $timeoutMin
+        $stopTime = set-stopTime $TimeoutMin
         $checkGrants = $null
         
         while (!$checkGrants -or !($checkGrants.scope.Contains($scope))) {
@@ -573,7 +573,7 @@ function setup-Applications() {
         })
 
     # cleanup
-    if ($remove) {
+    if ($Remove) {
         write-host "removing web service principals"
         $result = remove-servicePrincipal
     

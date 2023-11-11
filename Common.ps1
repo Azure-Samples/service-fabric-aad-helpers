@@ -10,8 +10,7 @@ version: 2.0.3
 $global:graphStatusCode = $null
 $sleepSeconds = 1
 
-function main ([guid]$tenantId = $null, [string]$Location = 'us', [string]$ClusterName = $null, [switch]$force) {
-
+function main ([string]$tenantId = $null, [switch]$force) {
     # Regional settings
     switch ($Location) {
         "china" {
@@ -30,6 +29,12 @@ function main ([guid]$tenantId = $null, [string]$Location = 'us', [string]$Clust
         }
     }
 
+    if (!$tenantId) {
+        $tenantId = $global:ConfigObj.TenantId
+    }
+    [guid]$tenantId = $tenantId
+    assert-notNull -obj $tenantId -msg 'tenantId required'
+
     # if cluster name is provided, use it to create app names
     if ($ClusterName) {
         $WebApplicationName = $ClusterName + "_Cluster"
@@ -40,19 +45,18 @@ function main ([guid]$tenantId = $null, [string]$Location = 'us', [string]$Clust
         $global:ConfigObj = [ordered]@{
             AuthString                  = $authString
             ClusterName                 = $ClusterName
+            GraphAPIFormat              = "$($resourceUrl)/v1.0/$($tenantId)/{0}"
             Headers                     = $null
             NativeClientAppId           = $null
             NativeClientApplicationName = $NativeClientApplicationName
-            ResourceUrl                 = $resourceUrl
             ServicePrincipalId          = $null
-            TenantId                    = $TenantId
-            WebAppId                    = $null
+            TenantId                    = $tenantId
+            WebAppId                    = $WebApplicationId
             WebApplicationName          = $WebApplicationName
         }
-
-        $global:ConfigObj.Headers = get-RESTHeaders -tenantId $TenantId -authString $authString -force $force
     }
 
+    $global:ConfigObj.Headers = get-RESTHeaders -tenantId $tenantId -authString $authString -force:$force
     return
 }
 
@@ -144,14 +148,14 @@ function get-restAuthGraph([guid]$tenantId, [guid]$clientId, $scope, $uri = $glo
     return $global:authresult
 }
 
-function get-RESTHeaders([guid]$tenantId = $null, $authString = $global:ConfigObj.AuthString, [switch]$force) {
+function get-RESTHeaders([guid]$tenantId, $authString = $global:ConfigObj.AuthString, [switch]$force) {
     $token = $null
     if (get-cloudInstance) {
         $token = get-RESTHeadersCloud
     }
 
     if (!$token) {
-        $token = get-RESTHeadersGraph -tenantId $tenantId -authString $authString -force $force
+        $token = get-RESTHeadersGraph -tenantId $tenantId -authString $authString -force:$force
     }
 
     $authHeader = @{
@@ -276,7 +280,7 @@ function get-RESTTokenGraph([guid]$tenantId, [string]$grantType, [guid]$clientId
     return $global:accessToken
 }
 
-function invoke-graphApiCall($uri, $headers = $global:config.Headers, $body = '', $method = 'post') {
+function invoke-graphApiCall($uri, $headers = $global:ConfigObj.Headers, $body = '', $method = 'post') {
     try {
         $error.clear()
         $global:graphStatusCode = $null
@@ -328,7 +332,7 @@ function invoke-graphApiCall($uri, $headers = $global:config.Headers, $body = ''
 
 function invoke-graphApi($uri, $headers = $global:ConfigObj.Headers, $body = '', $method = 'post', [switch]$retry) {
     $global:graphStatusCode = 0
-    $stopTime = set-stopTime $timeoutMin
+    $stopTime = set-stopTime $TimeoutMin
     $count = 0
 
     while ((get-date) -le $stopTime) {
@@ -354,7 +358,7 @@ function set-stopTime($minutes) {
 
 function wait-forResult([management.automation.functionInfo]$functionPointer, [string]$message, [datetime]$stopTime = [datetime]::MinValue, [switch]$waitForNullResult) {
     if ($stopTime -eq [datetime]::MinValue) {
-        $stopTime = set-stopTime $timeoutMin
+        $stopTime = set-stopTime $TimeoutMin
     }
 
     while ((get-date) -le $stopTime) {
@@ -387,11 +391,11 @@ function write-errorMessage($exceptionRecord) {
             $($exceptionRecord.ScriptStackTrace)
             
             use -force switch to force new authorization to acquire new token.
+            set `$global:ConfigObj to null to reset configuration.
         "
     write-error $errorString
     write-verbose  ($global:ConfigObj | convertto-json)
 }
 
-if (!$global:ConfigObj) {
-    main -tenantId $TenantId -Location $Location -ClusterName $ClusterName -force $force
-}
+main -tenantId $TenantId -force:$force
+

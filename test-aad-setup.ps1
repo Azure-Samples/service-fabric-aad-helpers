@@ -9,7 +9,8 @@ param(
     $tenantId = "$((get-azcontext).tenant.id)",
     $clusterName = $resourceGroupName,
     [switch]$remove,
-    [switch]$force
+    [switch]$force,
+    [switch]$noClusterResourceSetup
 )
 
 $errorActionPreference = 'continue'
@@ -29,6 +30,16 @@ try {
     #$webApplicationUri = 'https://mysftestcluster.contoso.com' # <--- must be verified domain due to AAD changes
     $webApplicationUri = "api://$tenantId/$clusterName" # <--- does not have to be verified domain
 
+    write-host ".\SetupApplications.ps1 -TenantId $tenantId ``
+        -ClusterName $clusterName ``
+        -SpaApplicationReplyUrl $replyUrl ``
+        -AddResourceAccess ``
+        -WebApplicationUri $webApplicationUri ``
+        -logFile $translog ``
+        -Verbose ``
+        -remove:$remove
+    " -ForegroundColor Cyan
+
     $ConfigObj = .\SetupApplications.ps1 -TenantId $tenantId `
         -ClusterName $clusterName `
         -SpaApplicationReplyUrl $replyUrl `
@@ -38,8 +49,17 @@ try {
         -Verbose `
         -remove:$remove
 
-    #write-host $ConfigObj
+    write-host "ConfigObj:" -ForegroundColor Cyan
     $ConfigObj
+
+    write-host ".\SetupUser.ps1 -UserName 'TestUser' ``
+        -Password 'P@ssword!123' ``
+        -Verbose ``
+        -logFile $translog ``
+        -remove:$remove ``
+        -force:$force ``
+        -ConfigObj $($ConfigObj | convertto-json -depth 99)
+    " -ForegroundColor Cyan
 
     .\SetupUser.ps1 -ConfigObj $ConfigObj `
         -UserName 'TestUser' `
@@ -49,6 +69,16 @@ try {
         -remove:$remove `
         -force:$force
 
+    write-host ".\SetupUser.ps1 -UserName 'TestAdmin' ``
+        -Password 'P@ssword!123' ``
+        -IsAdmin ``
+        -Verbose ``
+        -logFile $translog ``
+        -remove:$remove ``
+        -force:$force
+        -ConfigObj $($ConfigObj | convertto-json -depth 99)
+    " -ForegroundColor Cyan
+
     .\SetupUser.ps1 -ConfigObj $ConfigObj `
         -UserName 'TestAdmin' `
         -Password 'P@ssword!123' `
@@ -57,6 +87,14 @@ try {
         -logFile $translog `
         -remove:$remove `
         -force:$force
+
+    if($noClusterResourceSetup) {
+        write-host "skipping cluster resource setup" -ForegroundColor Cyan
+        return
+    }
+    write-host ".\SetupClusterResource.ps1 -resourceGroupName $resourceGroupName
+        -ConfigObj $($ConfigObj | convertto-json -depth 99)
+    " -ForegroundColor Cyan
 
     .\SetupClusterResource.ps1 -configObj $ConfigObj `
         -resourceGroupName $resourceGroupName

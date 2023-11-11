@@ -98,28 +98,28 @@ Param
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
     [int]
-    $timeoutMin = 5,
+    $TimeoutMin = 5,
 
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
     [string]
-    $logFile,
+    $LogFile,
 
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
     [Switch]
-    $remove,
+    $Remove,
 
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
     [Switch]
-    $force
+    $Force
 )
 
 # load common functions
 . "$PSScriptRoot\Common.ps1"
 
-$graphAPIFormat = $global:config.ResourceUrl + "/v1.0/" + $global:config.TenantId + "/{0}"
+$graphAPIFormat = $global:ConfigObj.GraphAPIFormat
 $servicePrincipalId = $null
 $WebApplicationId = $null
 $sleepSeconds = 5
@@ -298,7 +298,7 @@ function remove-user($userName, $domain) {
         return $true
     }
 
-    if (!$force -and (read-host "removing user $userName from Azure AD. do you want to continue?[y|n]") -imatch "n") {
+    if (!$Force -and (read-host "removing user $userName from Azure AD. do you want to continue?[y|n]") -imatch "n") {
         return
     }
 
@@ -308,7 +308,7 @@ function remove-user($userName, $domain) {
     write-host "removal complete" -ForegroundColor Green
 
     if ($result) {
-        $stopTime = set-stopTime $timeoutMin
+        $stopTime = set-stopTime $TimeoutMin
 
         do {
             $deleteResult = wait-forResult -functionPointer (get-item function:\get-user) `
@@ -339,7 +339,7 @@ function setup-User() {
     $userName = set-userName
 
     # cleanup
-    if ($remove) {
+    if ($Remove) {
         return (remove-user -userName $userName -domain $domain)
     }
 
