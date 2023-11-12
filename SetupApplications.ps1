@@ -3,7 +3,7 @@
 Setup applications in a Service Fabric cluster Azure Active Directory tenant.
 
 .DESCRIPTION
-version: 2.0.2
+version: 231112
 
 Prerequisites:
 1. An Azure Active Directory tenant.
