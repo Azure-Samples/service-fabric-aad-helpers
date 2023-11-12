@@ -303,7 +303,10 @@ function invoke-graphApiCall($uri, $headers = $global:ConfigObj.Headers, $body =
         $global:graphStatusCode = $result.StatusCode
 
         if (confirm-statusCodeSuccess -statusCode $global:graphStatusCode -method $method) {
-            return $resultObj
+            if ($resultObj) {
+                return $resultObj
+            }
+            return $true
         }
 
         return $null
@@ -398,4 +401,3 @@ function write-errorMessage($exceptionRecord) {
 }
 
 main -tenantId $TenantId -force:$force
-
