@@ -3,7 +3,7 @@
 Setup applications in a Service Fabric cluster Azure Active Directory tenant.
 
 .DESCRIPTION
-version: 2.0.1
+version: 2.0.2
 
 Prerequisites:
 1. An Azure Active Directory tenant.
@@ -36,6 +36,12 @@ Used to set metadata for specific region (for example: china, germany). Ignore i
 
 .PARAMETER AddResourceAccess
 Used to add the cluster application's resource access to "Windows Azure Active Directory" application explicitly when AAD is not able to add automatically. This may happen when the user account does not have adequate permission under this subscription.
+
+.PARAMETER AddVisualStudioAccess
+Used to add the Visual Studio MSAL client id's to the cluster application
+    https://learn.microsoft.com/en-us/azure/service-fabric/service-fabric-manage-application-in-visual-studio
+    Visual Studio 2022 and future versions: 04f0c124-f2bc-4f59-8241-bf6df9866bbd
+    Visual Studio 2019 and earlier: 872cd9fa-d31f-45e0-9eab-6e460a02d1f1
 
 .PARAMETER signInAudience
 Sign in audience option for selection of Applicaiton AAD tenant configuration type. Default selection is 'AzureADMyOrg'
@@ -108,6 +114,11 @@ Param
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
+    [Switch]
+    $AddVisualStudioAccess,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
     [String]
     [ValidateSet('AzureADMyOrg', 'AzureADMultipleOrgs', 'AzureADandPersonalMicrosoftAccount')]
     $SignInAudience = 'AzureADMyOrg',
@@ -139,6 +150,10 @@ $graphAPIFormat = $global:ConfigObj.GraphAPIFormat
 $sleepSeconds = 5
 $msGraphUserReadAppId = '00000003-0000-0000-c000-000000000000'
 $msGraphUserReadId = 'e1fe6dd8-ba31-4d61-89e7-88639da4683d'
+$visualStudioClientIds = @(
+    '04f0c124-f2bc-4f59-8241-bf6df9866bbd', # Visual Studio 2022 and future versions            
+    '872cd9fa-d31f-45e0-9eab-6e460a02d1f1'  # Visual Studio 2019 and earlier'
+)
 
 function main () {
     try {
@@ -190,29 +205,24 @@ function add-appRegistration($WebApplicationUri, $SpaApplicationReplyUrl, $requi
     $spaAppResource = @{
         redirectUris = @($SpaApplicationReplyUrl)
     }
-    
-    if ($AddResourceAccess) {
-        $webApp = @{
-            displayName            = $webApplicationName
-            signInAudience         = $SignInAudience
-            identifierUris         = @($WebApplicationUri)
-            defaultRedirectUri     = $SpaApplicationReplyUrl
-            appRoles               = $appRole
-            requiredResourceAccess = $requiredResourceAccess
-            spa                    = $spaAppResource
-            web                    = $webAppResource
+
+    $webApp = @{
+        displayName            = $webApplicationName
+        signInAudience         = $SignInAudience
+        identifierUris         = @($WebApplicationUri)
+        defaultRedirectUri     = $SpaApplicationReplyUrl
+        appRoles               = $appRole
+        requiredResourceAccess = $null
+        spa                    = $spaAppResource
+        web                    = $webAppResource
+        api                    = @{
+            preAuthorizedApplications = @()
+            oauth2PermissionScopes    = @()  
         }
     }
-    else {
-        $webApp = @{
-            displayName        = $webApplicationName
-            signInAudience     = $SignInAudience
-            identifierUris     = @($WebApplicationUri)
-            defaultRedirectUri = $SpaApplicationReplyUrl
-            appRoles           = $appRole
-            spa                = $spaAppResource
-            web                = $webAppResource
-        }
+
+    if ($AddResourceAccess) {
+        $webApp.requiredResourceAccess = $requiredResourceAccess
     }
 
     # add
@@ -305,6 +315,38 @@ function add-oauthPermissions($webApp, $webApplicationName) {
     }
 
     return $userImpersonationScopeId
+}
+
+function add-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]]$delegatedPermissionIds) {
+    #Create PreAuthorized Applications
+    $patchApplicationUri = $graphAPIFormat -f ("applications/{0}" -f $webApp.Id)
+    $preAuthorizedApplications = @()
+
+    foreach ($applicationId in $applicationIds) {
+        foreach ($delegatedPermissionId in $delegatedPermissionIds) {
+            $preAuthorizedApplications += @{
+                appId                  = $applicationId
+                delegatedPermissionIds = @($delegatedPermissionId)
+            }
+        }
+    }
+
+    $webApp.api.preAuthorizedApplications = $preAuthorizedApplications
+    $result = invoke-graphApi -retry -uri $patchApplicationUri -method 'patch' -body @{
+        'api' = @{
+            "preAuthorizedApplications" = $webApp.api.preAuthorizedApplications
+        }
+    }
+
+    if ($result) {
+        $null = wait-forResult -functionPointer (get-item function:\get-preauthorizedApplications) `
+            -message "waiting for preauthorized applications completion" `
+            -webApp $webApp `
+            -applicationIds $applicationIds `
+            -delegatedPermissionIds $delegatedPermissionIds
+    }
+
+    return $preAuthorizedApplications
 }
 
 function add-servicePrincipal($webApp, $assignmentRequired) {
@@ -412,7 +454,7 @@ function get-nativeClient($NativeClientApplicationName) {
     return $null
 }
 
-function get-OauthPermissions($webApp) {
+function get-oauthPermissions($webApp) {
     # Check for an existing delegated permission with value "user_impersonation". Normally this is created by default,
     # but if it isn't, we need to update the Application object with a new one.
     $user_impersonation_scope = $webApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq "user_impersonation" }
@@ -431,6 +473,23 @@ function get-oauthPermissionGrants($clientId) {
     $grants = invoke-graphApi -uri $uri -method 'get'
     write-verbose "grants:$($grants | convertto-json -depth 2)"
     return $grants.value
+}
+
+function get-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]]$delegatedPermissionIds) {
+    # check for existing preauthorized applications
+    $preAuthorizedApplications = $webApp.api.preAuthorizedApplications | Where-Object { 
+        $psitem.appId -in $applicationIds -and $psitem.delegatedPermissionIds -in $delegatedPermissionIds 
+    }
+    
+    write-host "preAuthorizedApplications:$preAuthorizedApplications"
+
+    if ($preAuthorizedApplications.count -eq $applicationIds.count) {
+        write-host "preAuthorizedApplications already exists. $($filter)" -foregroundcolor yellow
+        write-host "current preAuthorizedApplications:$($preAuthorizedApplications|convertto-json -depth 99)"
+        return $preAuthorizedApplications
+    }
+
+    return $null
 }
 
 function get-servicePrincipal($webApp) {
@@ -602,13 +661,24 @@ function setup-Applications() {
     Write-Host "Web Application Created: $($webApp.appId)"
 
     # check / add oauth user_impersonation permissions
-    $oauthPermissionsId = get-OauthPermissions -webApp $webApp
+    $oauthPermissionsId = get-oauthPermissions -webApp $webApp
     if (!$oauthPermissionsId) {
         $oauthPermissionsId = add-oauthPermissions -webApp $webApp -WebApplicationName $webApplicationName
     }
     assert-notNull $oauthPermissionsId 'Web Application Oauth permissions Failed'
     Write-Host "Web Application Oauth permissions created: $($oauthPermissionsId|convertto-json)"  -ForegroundColor Green
 
+    if ($AddVisualStudioAccess) {
+        write-host "adding visual studio preauthorized applications" -ForegroundColor Green
+        # check / add preauthorized applications
+        $preAuthorizedApplications = get-preauthorizedApplications -webApp $webApp -applicationIds $visualStudioClientIds -delegatedPermissionIds @($oauthPermissionsId)
+        if (!$preAuthorizedApplications) {
+            $preAuthorizedApplications = add-preauthorizedApplications -webApp $webApp -applicationIds $visualStudioClientIds -delegatedPermissionIds @($oauthPermissionsId)
+        }
+        assert-notNull $preAuthorizedApplications 'Web Application preauthorized applications Failed'
+        Write-Host "Web Application preauthorized applications created: $($preAuthorizedApplications|convertto-json)"  -ForegroundColor Green
+    }
+    
     # check / add servicePrincipal
     $servicePrincipal = get-servicePrincipal -webApp $webApp
     if (!$servicePrincipal) {

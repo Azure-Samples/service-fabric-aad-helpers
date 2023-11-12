@@ -10,7 +10,8 @@ param(
     $clusterName = $resourceGroupName,
     [switch]$remove,
     [switch]$force,
-    [switch]$noClusterResourceSetup
+    [switch]$noClusterResourceSetup,
+    [switch]$addVisualStudioAccess
 )
 
 $errorActionPreference = 'continue'
@@ -34,9 +35,11 @@ try {
         -ClusterName $clusterName ``
         -SpaApplicationReplyUrl $replyUrl ``
         -AddResourceAccess ``
+        -AddVisualStudioAccess:$addVisualStudioAccess ``
         -WebApplicationUri $webApplicationUri ``
         -logFile $translog ``
         -Verbose ``
+        -force:$force ``
         -remove:$remove
     " -ForegroundColor Cyan
 
@@ -44,9 +47,11 @@ try {
         -ClusterName $clusterName `
         -SpaApplicationReplyUrl $replyUrl `
         -AddResourceAccess `
+        -AddVisualStudioAccess:$addVisualStudioAccess `
         -WebApplicationUri $webApplicationUri `
         -logFile $translog `
         -Verbose `
+        -force:$force `
         -remove:$remove
 
     write-host "ConfigObj:" -ForegroundColor Cyan
