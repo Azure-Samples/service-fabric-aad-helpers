@@ -1,6 +1,5 @@
 <#
 test sf aad scripts
-place in clouddrive dir in shell.azure.com
 
 #>
 param(
@@ -8,16 +7,18 @@ param(
     $resourceGroupName,
     $tenantId = "$((get-azcontext).tenant.id)",
     $clusterName = $resourceGroupName,
+    [switch]$setupReadonlyUser,
+    [switch]$setupAdminUser,
+    [switch]$setupClusterResource,
+    [switch]$enableVisualStudioAccess,
     [switch]$remove,
-    [switch]$force,
-    [switch]$noClusterResourceSetup,
-    [switch]$addVisualStudioAccess
+    [switch]$force
 )
 
 $errorActionPreference = 'continue'
 $curDir = $pwd
 $startTime = get-date
-$translog = "$pwd/tran-$($startTime.tostring('yyMMddhhmmss')).log"
+#$translog = "$pwd/tran-$($startTime.tostring('yyMMddhhmmss')).log"
 
 try {
     write-host "$(get-date) starting transcript $translog"
@@ -30,24 +31,25 @@ try {
 
     #$webApplicationUri = 'https://mysftestcluster.contoso.com' # <--- must be verified domain due to AAD changes
     $webApplicationUri = "api://$tenantId/$clusterName" # <--- does not have to be verified domain
-
+    
+    $translog = "$pwd/setup-application-$($startTime.tostring('yyMMddhhmmss')).log"
     write-host ".\SetupApplications.ps1 -TenantId $tenantId ``
         -ClusterName $clusterName ``
         -SpaApplicationReplyUrl $replyUrl ``
         -AddResourceAccess ``
-        -AddVisualStudioAccess:$addVisualStudioAccess ``
+        -AddVisualStudioAccess:`$$enableVisualStudioAccess ``
         -WebApplicationUri $webApplicationUri ``
         -logFile $translog ``
         -Verbose ``
-        -force:$force ``
-        -remove:$remove
+        -force:`$$force ``
+        -remove:`$$remove
     " -ForegroundColor Cyan
 
     $ConfigObj = .\SetupApplications.ps1 -TenantId $tenantId `
         -ClusterName $clusterName `
         -SpaApplicationReplyUrl $replyUrl `
         -AddResourceAccess `
-        -AddVisualStudioAccess:$addVisualStudioAccess `
+        -AddVisualStudioAccess:$enableVisualStudioAccess `
         -WebApplicationUri $webApplicationUri `
         -logFile $translog `
         -Verbose `
@@ -57,53 +59,55 @@ try {
     write-host "ConfigObj:" -ForegroundColor Cyan
     $ConfigObj
 
-    write-host ".\SetupUser.ps1 -UserName 'TestUser' ``
+    if ($setupReadonlyUser) {
+        $translog = "$pwd/setup-testuser-$($startTime.tostring('yyMMddhhmmss')).log"
+        write-host ".\SetupUser.ps1 -UserName 'TestUser' ``
         -Password 'P@ssword!123' ``
         -Verbose ``
         -logFile $translog ``
-        -remove:$remove ``
-        -force:$force ``
+        -remove:`$$remove ``
+        -force:`$$force ``
         -ConfigObj $($ConfigObj | convertto-json -depth 99)
     " -ForegroundColor Cyan
 
-    .\SetupUser.ps1 -ConfigObj $ConfigObj `
-        -UserName 'TestUser' `
-        -Password 'P@ssword!123' `
-        -Verbose `
-        -logFile $translog `
-        -remove:$remove `
-        -force:$force
-
-    write-host ".\SetupUser.ps1 -UserName 'TestAdmin' ``
-        -Password 'P@ssword!123' ``
-        -IsAdmin ``
-        -Verbose ``
-        -logFile $translog ``
-        -remove:$remove ``
-        -force:$force
-        -ConfigObj $($ConfigObj | convertto-json -depth 99)
-    " -ForegroundColor Cyan
-
-    .\SetupUser.ps1 -ConfigObj $ConfigObj `
-        -UserName 'TestAdmin' `
-        -Password 'P@ssword!123' `
-        -IsAdmin `
-        -Verbose `
-        -logFile $translog `
-        -remove:$remove `
-        -force:$force
-
-    if($noClusterResourceSetup) {
-        write-host "skipping cluster resource setup" -ForegroundColor Cyan
-        return
+        .\SetupUser.ps1 -ConfigObj $ConfigObj `
+            -UserName 'TestUser' `
+            -Password 'P@ssword!123' `
+            -Verbose `
+            -logFile $translog `
+            -remove:$remove `
+            -force:$force
     }
-    write-host ".\SetupClusterResource.ps1 -resourceGroupName $resourceGroupName
-        -ConfigObj $($ConfigObj | convertto-json -depth 99)
-    " -ForegroundColor Cyan
+    
+    if ($setupAdminUser) {
+        $translog = "$pwd/setup-testadmin-$($startTime.tostring('yyMMddhhmmss')).log"
+        write-host ".\SetupUser.ps1 -UserName 'TestAdmin' ``
+            -Password 'P@ssword!123' ``
+            -IsAdmin ``
+            -Verbose ``
+            -logFile $translog ``
+            -remove:`$$remove ``
+            -force:`$$force
+            -ConfigObj $($ConfigObj | convertto-json -depth 99)
+        " -ForegroundColor Cyan
+    
+        .\SetupUser.ps1 -ConfigObj $ConfigObj `
+            -UserName 'TestAdmin' `
+            -Password 'P@ssword!123' `
+            -IsAdmin `
+            -Verbose `
+            -logFile $translog `
+            -remove:$remove `
+            -force:$force    
+    }
 
-    .\SetupClusterResource.ps1 -configObj $ConfigObj `
-        -resourceGroupName $resourceGroupName
+    if ($setupClusterResource) {
+        write-host ".\SetupClusterResource.ps1 -resourceGroupName $resourceGroupName
+            -ConfigObj $($ConfigObj | convertto-json -depth 99)
+        " -ForegroundColor Cyan
 
+        .\SetupClusterResource.ps1 -configObj $ConfigObj -resourceGroupName $resourceGroupName
+    }
 }
 finally {
     write-host "$(get-date) stopping transcript $translog"
