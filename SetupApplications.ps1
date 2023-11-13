@@ -349,7 +349,7 @@ function add-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]
         $mergedPermissions = [collections.arraylist]::new()
         [void]$mergedPermissions.AddRange($delegatedPermissionIds)
 
-        $existingApplication = get-preauthorizedApplications -webApp $webApp -applicationIds $applicationId
+        $existingApplication = get-preauthorizedApplications -applicationId $webApp.id -applicationIds $applicationId
         if ($existingApplication) {
             foreach ($existingPermission in $existingApplication.delegatedPermissionIds) {
                 if (!$mergedPermissions -contains $existingPermission) {
@@ -374,7 +374,7 @@ function add-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]
     if ($result) {
         $null = wait-forResult -functionPointer (get-item function:\get-preauthorizedApplications) `
             -message "waiting for preauthorized applications completion" `
-            -webApp $webApp `
+            -applicationId $webApp.id `
             -applicationIds $applicationIds `
             -delegatedPermissionIds $delegatedPermissionIds
     }
@@ -456,7 +456,7 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
 }
 
 function confirm-visualStudioAccess($webApp, [guid]$oauthPermissionsId) {
-    $preAuthorizedApplications = get-preauthorizedApplications -webApp $webApp -applicationIds $visualStudioClientIds -delegatedPermissionIds @($oauthPermissionsId)
+    $preAuthorizedApplications = get-preauthorizedApplications -applicationId $webApp.id -applicationIds $visualStudioClientIds -delegatedPermissionIds @($oauthPermissionsId)
     if ($preAuthorizedApplications) {
         write-host "visual studio preauthorized applications already exists."
         if (!$AddVisualStudioAccess) {
@@ -550,9 +550,9 @@ function get-oauthPermissionGrants($clientId) {
     return $grants.value
 }
 
-function get-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]]$delegatedPermissionIds = $null) {
+function get-preauthorizedApplications([guid]$applicationId, [guid[]]$applicationIds, [guid[]]$delegatedPermissionIds = $null) {
     # check for existing preauthorized applications
-    $webApp = get-appRegistrationById -applicationId $webApp.id
+    $webApp = get-appRegistrationById -applicationId $applicationId
     $preAuthorizedApplications = $webApp.api.preAuthorizedApplications | Where-Object {
         $psitem.appId -in $applicationIds
     }
@@ -644,7 +644,7 @@ function remove-nativeClient($NativeClientApplicationName) {
 
 function remove-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]]$delegatedPermissionIds) {
     # remove preauthorized applications
-    if (!(get-preauthorizedApplications -webApp $webApp -applicationIds $applicationIds -delegatedPermissionIds $delegatedPermissionIds)) {
+    if (!(get-preauthorizedApplications -applicationId $webApp.id -applicationIds $applicationIds -delegatedPermissionIds $delegatedPermissionIds)) {
         write-host "preauthorized applications do not exist." -ForegroundColor Green
         return $webApp.api.preAuthorizedApplications
     }
@@ -655,7 +655,7 @@ function remove-preauthorizedApplications($webApp, [guid[]]$applicationIds, [gui
     
     foreach ($applicationId in $applicationIds) {
         # check for existing preauthorized applications and scrub permissions
-        $existingApplication = get-preauthorizedApplications -webApp $webApp -applicationIds $applicationId -delegatedPermissionIds $delegatedPermissionIds
+        $existingApplication = get-preauthorizedApplications -applicationId $webApp.id -applicationIds $applicationId -delegatedPermissionIds $delegatedPermissionIds
         if (!$existingApplication) {
             continue
         }
@@ -691,7 +691,7 @@ function remove-preauthorizedApplications($webApp, [guid[]]$applicationIds, [gui
         $null = wait-forResult -functionPointer (get-item function:\get-preauthorizedApplications) `
             -message "waiting for preauthorized applications completion" `
             -waitForNullResult `
-            -webApp $webApp `
+            -applicationId $webApp.id `
             -applicationIds $applicationIds `
             -delegatedPermissionIds $delegatedPermissionIds
     }
