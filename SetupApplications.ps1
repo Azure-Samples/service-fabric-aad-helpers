@@ -459,10 +459,19 @@ function confirm-visualStudioAccess($webApp, [guid]$oauthPermissionsId) {
     $preAuthorizedApplications = get-preauthorizedApplications -applicationId $webApp.id -applicationIds $visualStudioClientIds -delegatedPermissionIds @($oauthPermissionsId)
     if ($preAuthorizedApplications) {
         write-host "visual studio preauthorized applications already exists."
+        # todo: should we remove if $AddVisualStudioAccess is false?
         if (!$AddVisualStudioAccess) {
-            write-host "removing visual studio preauthorized applications" -ForegroundColor Yellow
-            remove-preauthorizedApplications -webApp $webApp -applicationIds $visualStudioClientIds -delegatedPermissionIds @($oauthPermissionsId)
-            return
+            $remove = $true
+
+            if (!$Force) {
+                $remove = (read-host "Do you want to remove visual studio preauthorized applications? (y/n)") -ieq 'y'
+            }
+
+            if ($remove) {
+                write-host "removing visual studio preauthorized applications" -ForegroundColor Yellow
+                remove-preauthorizedApplications -webApp $webApp -applicationIds $visualStudioClientIds -delegatedPermissionIds @($oauthPermissionsId)
+                return
+            }
         }
     }
     else {
