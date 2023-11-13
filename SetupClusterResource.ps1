@@ -2,16 +2,53 @@
 .SYNOPSIS
 adds 'azureActiveDirectory' json configuration to given Microsoft.ServiceFabric/clusters resource
 
+.DESCRIPTION
 requires azure module 'az'
 install-module az
-v 1.1
+version: 231112
+
+.PARAMETER ConfigObj
+    hashtable containing configuration values
+
+.PARAMETER TenantId
+    tenant id of the application to update
+
+.PARAMETER ClusterApplication
+    the application id of the cluster application
+
+.PARAMETER ClientApplication
+    the application id of the client application
+
+.PARAMETER ResourceGroupName
+    the resource group name of the cluster
+
+.PARAMETER ClusterName
+    the name of the cluster
+
+.PARAMETER DeploymentName
+    the name of the deployment
+
+.PARAMETER TemplateFile
+    the path to the template file
+
+.PARAMETER WhatIf
+    the switch to run the script in whatif mode
+
+.PARAMETER Force
+    the switch to force overwrite of template file
 
 .EXAMPLE
-.\setupClusterResource.ps1 -tenantId cb4dc457-01c8-40c7-855a-5468ebd5bc74 `
-    -clusterApplication e6bba8d5-3fb6-47ac-9927-2a50cf763d36 `
-    -clientApplication 2324af84-f14b-4ee8-a695-6b464f8dbb92 `
-    -resourceGroupName 'mysftestcluster' `
-    -clusterName 'mysftestcluster'
+.\setupClusterResource.ps1 -tenantId 'cb4dc457-01c8-40c7-855a-5468ebd5bc74' `
+        -clusterApplication 'e6bba8d5-3fb6-47ac-9927-2a50cf763d36' `
+        -clientApplication '2324af84-f14b-4ee8-a695-6b464f8dbb92' `
+        -resourceGroupName 'mysftestcluster' `
+        -clusterName 'mysftestcluster'
+
+.EXAMPLE
+.\setupClusterResource.ps1
+        -ConfigObj $ConfigObj `
+        -resourceGroupName 'mysftestcluster' `
+        -clusterName 'mysftestcluster'
 #>
 [cmdletbinding()]
 param(
@@ -19,83 +56,83 @@ param(
     [hashtable]$ConfigObj = @{},
 
     [Parameter(ParameterSetName = 'values', Mandatory = $true)]
-    [string]$tenantId = '', # guid
-    
+    [string]$TenantId = '', # guid
+
     [Parameter(ParameterSetName = 'values', Mandatory = $true)]
-    [string]$clusterApplication = '', # guid
-    
+    [string]$ClusterApplication = '', # guid
+
     [Parameter(ParameterSetName = 'values', Mandatory = $true)]
-    [string]$clientApplication = '', # guid
-    
+    [string]$ClientApplication = '', # guid
+
     [Parameter(ParameterSetName = 'values', Mandatory = $true)]
     [Parameter(ParameterSetName = 'customobj', Mandatory = $true)]
-    [string]$resourceGroupName = '',
-    
+    [string]$ResourceGroupName = '',
+
     [Parameter(ParameterSetName = 'values', Mandatory = $true)]
-    [string]$clusterName = '',
+    [string]$ClusterName = '',
 
     [Parameter(ParameterSetName = 'values')]
     [Parameter(ParameterSetName = 'customobj')]
-    [string]$deploymentName = "add-azureactivedirectory-$((get-date).tostring('yy-MM-dd-HH-mm-ss'))",
-    
+    [string]$DeploymentName = "add-azureactivedirectory-$((get-date).tostring('yy-MM-dd-HH-mm-ss'))",
+
     [Parameter(ParameterSetName = 'values')]
     [Parameter(ParameterSetName = 'customobj')]
-    [string]$templateFile = "$pwd/template-$deploymentName.json",
-    
+    [string]$TemplateFile = "$pwd/template-$DeploymentName.json",
+
     [Parameter(ParameterSetName = 'values')]
     [Parameter(ParameterSetName = 'customobj')]
-    [switch]$whatIf,
-    
+    [switch]$WhatIf,
+
     [Parameter(ParameterSetName = 'values')]
     [Parameter(ParameterSetName = 'customobj')]
-    [switch]$force
+    [switch]$Force
 )
 
 $PSModuleAutoLoadingPreference = 2
 
 if ($ConfigObj) {
     write-host "using ConfigObj"
-    $tenantId = $ConfigObj.TenantId
-    $clusterApplication = $ConfigObj.WebAppId
-    $clientApplication = $ConfigObj.NativeClientAppId
-    $clusterName = $ConfigObj.ClusterName
+    $TenantId = $ConfigObj.TenantId
+    $ClusterApplication = $ConfigObj.WebAppId
+    $ClientApplication = $ConfigObj.NativeClientAppId
+    $ClusterName = $ConfigObj.ClusterName
 }
 
-$azureActiveDirectory = @{ 
+$azureActiveDirectory = @{
     azureActiveDirectory = @{
-        tenantId           = $tenantId
-        clusterApplication = $clusterApplication
-        clientApplication  = $clientApplication
+        tenantId           = $TenantId
+        clusterApplication = $ClusterApplication
+        clientApplication  = $ClientApplication
     }
 }
 
 $azureActiveDirectory | convertto-json
 
-if ((test-path $templateFile) -and $force) {
-    remove-item $templateFile -Force
+if ((test-path $TemplateFile) -and $Force) {
+    remove-item $TemplateFile -Force
 }
 
 if (!(get-command get-azcontext)) {
     write-warning "azure az module is required to run this script. 'ctrl-c' to exit script or {enter} to continue."
-    if (!$force) {
+    if (!$Force) {
         pause
     }
     install-module az -Force -AllowClobber
 }
 
-if (!(Get-AzContext) -or ((Get-AzContext).Tenant.id -ine $tenantId)) { 
-    if (!(Connect-AzAccount -Tenant $tenantId)) {
+if (!(Get-AzContext) -or ((Get-AzContext).Tenant.id -ine $TenantId)) {
+    if (!(Connect-AzAccount -Tenant $TenantId)) {
         write-error "authentication error"
         return
     }
 }
 
-write-host "`$resources = @(get-azresource -Name $clusterName | Where-Object ResourceType -imatch 'Microsoft.ServiceFabric')"
-$resources = @(get-azresource -Name $clusterName | Where-Object ResourceType -imatch 'Microsoft.ServiceFabric')
+write-host "`$resources = @(get-azresource -Name $ClusterName | Where-Object ResourceType -imatch 'Microsoft.ServiceFabric')"
+$resources = @(get-azresource -Name $ClusterName | Where-Object ResourceType -imatch 'Microsoft.ServiceFabric')
 
 if ($resources.count -ine 1) {
     if ($resources.Count -lt 1) {
-        write-error "unable to find cluster $clusterName"
+        write-error "unable to find cluster $ClusterName"
     }
     else {
         write-error "multiple clusters found $($resources | Format-List *)"
@@ -108,25 +145,25 @@ $clusterResource = $resources[0].ResourceId
 $resourceType = $resources[0].ResourceType
 
 write-host "
-Export-AzResourceGroup -ResourceGroupName $resourceGroupName ``
-    -Path $templateFile ``
+Export-AzResourceGroup -ResourceGroupName $ResourceGroupName ``
+    -Path $TemplateFile ``
     -Resource $clusterResource ``
     -IncludeComments ``
     -SkipAllParameterization ``
     -Verbose
 "
 
-Export-AzResourceGroup -ResourceGroupName $resourceGroupName `
-    -Path $templateFile `
+Export-AzResourceGroup -ResourceGroupName $ResourceGroupName `
+    -Path $TemplateFile `
     -Resource $clusterResource `
     -IncludeComments `
     -SkipAllParameterization `
     -Verbose
 
 # modify template file
-$templateJson = get-content -raw $templateFile
+$templateJson = get-content -raw $TemplateFile
 $templateJson
-$global:templateObj = $templateJson | convertfrom-json 
+$global:templateObj = $templateJson | convertfrom-json
 $clusterObj = $global:templateObj.resources | Where-Object type -ieq $resourceType
 
 if (!$clusterObj) {
@@ -148,16 +185,16 @@ else {
 $templateJson = $global:templateObj | convertto-json -depth 99
 $templateJson
 
-$templateJson | out-file $templateFile
+$templateJson | out-file $TemplateFile
 
 write-host "
-Test-azResourceGroupDeployment -ResourceGroupName $resourceGroupName ``
-    -TemplateFile $templateFile ``
+Test-azResourceGroupDeployment -ResourceGroupName $ResourceGroupName ``
+    -TemplateFile $TemplateFile ``
     -Mode Complete
 "
 
-$ret = Test-azResourceGroupDeployment -ResourceGroupName $resourceGroupName `
-    -TemplateFile $templateFile `
+$ret = Test-azResourceGroupDeployment -ResourceGroupName $ResourceGroupName `
+    -TemplateFile $TemplateFile `
     -Mode Complete
 
 if ($ret) {
@@ -165,29 +202,29 @@ if ($ret) {
     return
 }
 else {
-    write-host "template valid: $templateFile" -ForegroundColor Green
+    write-host "template valid: $TemplateFile" -ForegroundColor Green
 }
 
 write-host "
-New-AzResourceGroupDeployment -Name `"$deploymentName`" ``
-    -ResourceGroupName $resourceGroupName ``
+New-AzResourceGroupDeployment -Name `"$DeploymentName`" ``
+    -ResourceGroupName $ResourceGroupName ``
     -Mode Incremental ``
     -DeploymentDebugLogLevel All ``
-    -TemplateFile $templateFile ``
+    -TemplateFile $TemplateFile ``
     -Verbose
 " -ForegroundColor Yellow
 
-if (!$whatIf) {
-    New-AzResourceGroupDeployment -Name "$deploymentName" `
-        -ResourceGroupName $resourceGroupName `
+if (!$WhatIf) {
+    New-AzResourceGroupDeployment -Name "$DeploymentName" `
+        -ResourceGroupName $ResourceGroupName `
         -Mode Incremental `
         -DeploymentDebugLogLevel All `
-        -TemplateFile $templateFile `
+        -TemplateFile $TemplateFile `
         -Verbose
 }
 else {
     write-host "execute command above or rerun script without -whatif when ready to update cluster." -ForegroundColor Green
 }
 
-write-host "updated template file: $($templateFile)" -ForegroundColor Cyan
+write-host "updated template file: $($TemplateFile)" -ForegroundColor Cyan
 write-host "finished"

@@ -1,12 +1,12 @@
 ﻿<#
 .SYNOPSIS
-Setup applications in a Service Fabric cluster Azure Active Directory tenant.
+Setup applications in a Service Fabric cluster Entra tenant.
 
 .DESCRIPTION
 version: 231112
 
 Prerequisites:
-1. An Azure Active Directory tenant.
+1. An Entra tenant.
 2. A Global Admin user within tenant.
 
 .PARAMETER TenantId
@@ -23,7 +23,7 @@ Example: 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster'
 
 .PARAMETER SpaApplicationReplyUrl
 Reply URL of spa application. Format: https://<Domain name of cluster>:<Service Fabric Http gateway port>
-Example: 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
+Example: 'https://mycluster.westus.cloudapp.azure.com:19080/Explorer/index.html'
 
 .PARAMETER NativeClientApplicationName
 Name of native client application representing client.
@@ -35,41 +35,63 @@ A friendly Service Fabric cluster name. Application settings generated from clus
 Used to set metadata for specific region (for example: china, germany). Ignore it in global environment.
 
 .PARAMETER AddResourceAccess
-Used to add the cluster application's resource access to "Windows Azure Active Directory" application explicitly when AAD is not able to add automatically. This may happen when the user account does not have adequate permission under this subscription.
+Used to add the cluster applications resource access to Entra application explicitly when AAD is not able to add automatically. This may happen when the user account does not have adequate permission under this subscription.
 
 .PARAMETER AddVisualStudioAccess
-Used to add the Visual Studio MSAL client id's to the cluster application
-    https://learn.microsoft.com/en-us/azure/service-fabric/service-fabric-manage-application-in-visual-studio
-    Visual Studio 2022 and future versions: 04f0c124-f2bc-4f59-8241-bf6df9866bbd
-    Visual Studio 2019 and earlier: 872cd9fa-d31f-45e0-9eab-6e460a02d1f1
+Used to add the Visual Studio MSAL client ids to the cluster application
+    'https://learn.microsoft.com/en-us/azure/service-fabric/service-fabric-manage-application-in-visual-studio'
+    Visual Studio 2022 and future versions: '04f0c124-f2bc-4f59-8241-bf6df9866bbd'
+    Visual Studio 2019 and earlier: '872cd9fa-d31f-45e0-9eab-6e460a02d1f1'
 
-.PARAMETER signInAudience
+.PARAMETER SignInAudience
 Sign in audience option for selection of Applicaiton AAD tenant configuration type. Default selection is 'AzureADMyOrg'
 'AzureADMyOrg', 'AzureADMultipleOrgs', 'AzureADandPersonalMicrosoftAccount'
 
-.PARAMETER timeoutMin
+.PARAMETER TimeoutMin
 Script execution retry wait timeout in minutes. Default is 5 minutes. If script times out, it can be re-executed and will continue configuration as script is idempotent.
 
-.PARAMETER force
+.PARAMETER LogFile
+Log file path to save script transcript logs.
+
+.PARAMETER Force
 Use Force switch to force new authorization to acquire new token.
 
-.PARAMETER remove
+.PARAMETER Remove
 Use Remove to remove AAD configuration for provided cluster.
 
 .EXAMPLE
-. Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' -SpaApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
+.\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' `
+        -ClusterName 'MyCluster' `
+        -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' `
+        -SpaApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
 
 Setup tenant with default settings generated from a friendly cluster name.
 
 .EXAMPLE
-. Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -WebApplicationName 'SFWeb' -WebApplicationUri 'https://mycluster.contoso.com' -SpaApplicationReplyUrl 'https://mycluster.contoso:19080/explorer/index.html' -NativeClientApplicationName 'SFnative'
+.\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' `
+        -WebApplicationName 'SFWeb' `
+        -WebApplicationUri 'https://mycluster.contoso.com' `
+        -SpaApplicationReplyUrl 'https://mycluster.contoso:19080/explorer/index.html' `
+        -NativeClientApplicationName 'SFnative'
 
 Setup tenant with explicit application settings.
 
 .EXAMPLE
-. $ConfigObj = Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' -SpaApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
+$ConfigObj = .\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' `
+        -ClusterName 'MyCluster' `
+        -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' `
+        -SpaApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
 
 Setup and save the setup result into a temporary variable to pass into SetupUser.ps1
+
+.EXAMPLE
+.\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' `
+        -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' `
+        -SpaApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html' `
+        -AddResourceAccess `
+        -AddVisualStudioAccess
+
+Setup tenant with explicit application settings and add explicit resource access to Entra application.
 #>
 [cmdletbinding()]
 Param
@@ -521,7 +543,7 @@ function get-oauthPermissions($webApp) {
 }
 
 function get-oauthPermissionGrants($clientId) {
-    # get 'Windows Azure Active Directory' app registration by well-known appId
+    # get 'Entra' app registration by well-known appId
     $uri = [string]::Format($graphAPIFormat, "oauth2PermissionGrants") + "?`$filter=clientId eq '$clientId'"
     $grants = invoke-graphApi -uri $uri -method 'get'
     write-verbose "grants:$($grants | convertto-json -depth 2)"
@@ -568,7 +590,7 @@ function get-servicePrincipal($webApp) {
 }
 
 function get-servicePrincipalAAD() {
-    # get 'Windows Azure Active Directory' app registration by well-known appId
+    # get 'Entra' app registration by well-known appId
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + "?`$filter=appId eq '$msGraphUserReadAppId'"
     $global:AADServicePrincipal = invoke-graphApi -uri $uri -method 'get'
     write-verbose "aad service princiapal:$($AADServicePrincipal | convertto-json -depth 2)"

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-Setup user in a Service Fabric cluster Azure Active Directory tenant.
+Setup user in a Service Fabric cluster Entra tenant.
 
 .DESCRIPTION
 This script can create 2 types of users: Admin user assigned admin app role; Read-only user assigned readonly app role.
@@ -8,7 +8,7 @@ This script can create 2 types of users: Admin user assigned admin app role; Rea
 version: 2.0.1
 
 Prerequisites:
-1. An Azure Active Directory Tenant
+1. An Entra Tenant
 2. Service Fabric web and native client applications are setup. Or run SetupApplications.ps1.
 
 .PARAMETER TenantId
@@ -35,13 +35,13 @@ Used to set metadata for specific region (for example: china). Ignore it in glob
 .PARAMETER Domain
 Domain is the verified domain being used for user account configuration.
 
-.PARAMETER timeoutMin
+.PARAMETER TimeoutMin
 Script execution retry wait timeout in minutes. Default is 5 minutes. If script times out, it can be re-executed and will continue configuration as script is idempotent.
 
-.PARAMETER force
+.PARAMETER Force
 Use Force switch to force removal of AAD user account if specifying -remove.
 
-.PARAMETER remove
+.PARAMETER Remove
 Use Remove to remove AAD configuration and optionally user.
 
 .EXAMPLE
@@ -50,7 +50,11 @@ Use Remove to remove AAD configuration and optionally user.
 Setup up a read-only user with return SetupApplications.ps1
 
 .EXAMPLE
-. Scripts\SetupUser.ps1 -TenantId '7b25ab7e-cd25-4f0c-be06-939424dc9cc9' -WebApplicationId '9bf7c6f3-53ce-4c63-8ab3-928c7bf4200b' -UserName 'SFAdmin' -Password 'Test4321' -IsAdmin
+. Scripts\SetupUser.ps1 -TenantId '7b25ab7e-cd25-4f0c-be06-939424dc9cc9' `
+        -WebApplicationId '9bf7c6f3-53ce-4c63-8ab3-928c7bf4200b' `
+        -UserName 'SFAdmin' `
+        -Password 'Test4321' `
+        -IsAdmin
 
 Setup up an admin user providing values for parameters
 #>

@@ -1,3 +1,37 @@
+<#
+.SYNOPSIS
+Update applications in a Service Fabric cluster Entra tenant to migrate the web redirect URIs to SPA redirect URIs.
+
+.DESCRIPTION
+version: 231112
+
+.PARAMETER WebApplicationId
+    The WebApplicationId of the application to update
+
+.PARAMETER TimeoutMin
+    The timeout in minutes for the script to run
+
+.PARAMETER HttpPort
+    The port to search for in the redirect URIs
+
+.PARAMETER LogFile
+    The path to the log file
+
+.PARAMETER TenantId
+    The tenant id of the application to update
+
+.PARAMETER WhatIf
+    The switch to run the script in whatif mode
+
+.EXAMPLE
+    .\UpdateApplication.ps1 -WebApplicationId 'https://mysftestcluster.contoso.com' `
+        -TenantId '00000000-0000-0000-0000-000000000000' `
+        -TimeoutMin 5 `
+        -HttpPort 19080 `
+        -LogFile 'C:\temp\update-app.log' `
+        -WhatIf
+
+#>
 [cmdletbinding()]
 Param
 (
@@ -12,7 +46,7 @@ Param
     $HttpPort = 19080,
     [Parameter(ParameterSetName = 'Customize')]
     [string]
-    $logFile,
+    $LogFile,
     [Parameter(ParameterSetName = 'Customize', Mandatory = $true)]
     [String]
     $TenantId,
@@ -27,8 +61,8 @@ $graphAPIFormat = $global:ConfigObj.GraphAPIFormat
 
 function main () {
     try {
-        if ($logFile) {
-            Start-Transcript -path $logFile -Force | Out-Null
+        if ($LogFile) {
+            Start-Transcript -path $LogFile -Force | Out-Null
         }
 
         update-Application
@@ -37,7 +71,7 @@ function main () {
         write-errorMessage $psitem
     }
     finally {
-        if ($logFile) {
+        if ($LogFile) {
             Stop-Transcript | Out-Null
         }
     }
