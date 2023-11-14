@@ -376,7 +376,8 @@ function add-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]
             -message "waiting for preauthorized applications completion" `
             -webApp $webApp `
             -applicationIds $applicationIds `
-            -delegatedPermissionIds $delegatedPermissionIds
+            -delegatedPermissionIds $delegatedPermissionIds `
+            -remote $true
     }
 
     return $preAuthorizedApplications
@@ -559,10 +560,19 @@ function get-oauthPermissionGrants($clientId) {
     return $grants.value
 }
 
-function get-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]]$delegatedPermissionIds = $null) {
+function get-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]]$delegatedPermissionIds = $null, [bool]$remote = $false) {
     # check for existing preauthorized applications
-    $webApp = get-appRegistrationById -applicationId $webApp.id
-    $preAuthorizedApplications = $webApp.api.preAuthorizedApplications | Where-Object {
+    $tempWebApp = $webApp
+    if($remote){
+        write-verbose "getting remote preauthorized applications"
+        $tempWebApp = get-appRegistrationById -applicationId $webApp.id
+        if($webApp.api.preAuthorizedApplications -ine $tempWebApp.api.preAuthorizedApplications){
+            write-warning "preAuthorizedApplications are different. Using remote preAuthorizedApplications"
+            #$webApp.api.preAuthorizedApplications = $tempWebApp.api.preAuthorizedApplications
+        }
+    }
+    
+    $preAuthorizedApplications = $tempWebApp.api.preAuthorizedApplications | Where-Object {
         $psitem.appId -in $applicationIds
     }
 
@@ -702,7 +712,8 @@ function remove-preauthorizedApplications($webApp, [guid[]]$applicationIds, [gui
             -waitForNullResult `
             -webApp $webApp `
             -applicationIds $applicationIds `
-            -delegatedPermissionIds $delegatedPermissionIds
+            -delegatedPermissionIds $delegatedPermissionIds `
+            -remote $true
     }
     
     return $preAuthorizedApplications
