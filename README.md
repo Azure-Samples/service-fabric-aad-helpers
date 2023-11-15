@@ -44,22 +44,24 @@ $ConfigObj = .\SetupApplications.ps1 -TenantId '<tenant_id>' `
 
 ### SetupApplications Parameters
 
+<details><summary>Click to expand</summary>
+
 ```powershell
->help .\SetupApplications.ps1 -full    
+>help .\SetupApplications.ps1 -full
 PARAMETERS
     -TenantId <String>
         ID of tenant hosting Service Fabric cluster.
-        
+
     -WebApplicationName <String>
         Name of web application representing Service Fabric cluster.
-        
+
     -WebApplicationUri <String>
-        App ID URI of web application. If using https:// format, the domain has to be a verified domain. Format: https://<Domain name 
+        App ID URI of web application. If using https:// format, the domain has to be a verified domain. Format: https://<Domain name
         of cluster>
         Example: 'https://mycluster.contoso.com'
         Alternatively api:// format can be used which does not require a verified domain. Format: api://<tenant id>/<cluster name>
         Example: 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster'
-        
+
     -SpaApplicationReplyUrl <String>
         Reply URL of spa application. Format: https://<Domain name of cluster>:<Service Fabric Http gateway port>
         Example: 'https://mycluster.westus.cloudapp.azure.com:19080/Explorer/index.html'
@@ -68,7 +70,7 @@ PARAMETERS
         Name of native client application representing client.
 
     -ClusterName <String>
-        A friendly Service Fabric cluster name. Application settings generated from cluster name: WebApplicationName = ClusterName +    
+        A friendly Service Fabric cluster name. Application settings generated from cluster name: WebApplicationName = ClusterName +
         "_Cluster", NativeClientApplicationName = ClusterName + "_Client"
 
     -Location <String>
@@ -89,7 +91,7 @@ PARAMETERS
         'AzureADMyOrg', 'AzureADMultipleOrgs', 'AzureADandPersonalMicrosoftAccount'
 
     -TimeoutMin <Int32>
-        Script execution retry wait timeout in minutes. Default is 5 minutes. If script times out, it can be re-executed and will       
+        Script execution retry wait timeout in minutes. Default is 5 minutes. If script times out, it can be re-executed and will
         continue configuration as script is idempotent.
 
     -LogFile <String>
@@ -136,6 +138,8 @@ PARAMETERS
     Setup tenant with explicit application settings and add explicit resource access to Entra application.
 ```
 
+</details>
+
 Running the script will prompt you to sign in to an account with admin privileges for the Entra tenant. Once signed in, the script will create the web and native applications to represent your Service Fabric cluster. The script will also print the JSON required by the Azure Resource Manager template when you go on to [create your Service Fabric cluster](https://docs.microsoft.com/en-us/azure/service-fabric/service-fabric-cluster-creation-create-template#add-entra-configuration-to-use-entra-for-client-access), so be sure to save it somewhere.
 
 ### Create Entra users
@@ -165,23 +169,25 @@ $ConfigObj = .\SetupApplications.ps1 -TenantId '<tenant_id>' -ClusterName '<clus
 
 ### SetupUser Parameters
 
+<details><summary>Click to expand</summary>
+
 ```powershell
->help .\SetupUser.ps1 -full        
+>help .\SetupUser.ps1 -full
 PARAMETERS
     -TenantId <String>
         ID of tenant hosting Service Fabric cluster.
-                
+
     -WebApplicationId <String>
         ObjectId of web application representing Service Fabric cluster.
-                
+
     -UserName <String>
-                
+
     -Password <String>
         Password of new user.
-        
+
     -IsAdmin [<SwitchParameter>]
         User is assigned admin app role if indicated; otherwise, readonly app role.
-        
+
     -ConfigObj <Hashtable>
         Temporary variable of tenant setup result returned by SetupApplications.ps1.
 
@@ -192,7 +198,7 @@ PARAMETERS
         Domain is the verified domain being used for user account configuration.
 
     -TimeoutMin <Int32>
-        Script execution retry wait timeout in minutes. Default is 5 minutes. If script times out, it can be re-executed and will       
+        Script execution retry wait timeout in minutes. Default is 5 minutes. If script times out, it can be re-executed and will
         continue configuration as script is idempotent.
 
     -LogFile <String>
@@ -220,6 +226,8 @@ PARAMETERS
     Setup up an admin user providing values for parameters
 ```
 
+</details>
+
 ### Update an existing Entra Application
 
 Update an existing Entra Application to migrate the web redirect URIs to SPA redirect URIs.
@@ -234,12 +242,14 @@ The webApplicationId can be found in azure portal by checking the Application (c
 
 .\UpdateApplication.ps1 -WebApplicationId '<web_app_id>' -TenantId '<tenant_id>'
 
-# Update for clusters not using standard 19080 http port 
+# Update for clusters not using standard 19080 http port
 .\UpdateApplication.ps1 -WebApplicationId '<web_app_id>' -TenantId '<tenant_id>' -HttpPort 19007
 
 ```
 
 ### UpdateApplication Parameters
+
+<details><summary>Click to expand</summary>
 
 ```powershell
 >help .\UpdateApplication.ps1 -full
@@ -247,22 +257,22 @@ The webApplicationId can be found in azure portal by checking the Application (c
 PARAMETERS
     -WebApplicationId <String>
         The WebApplicationId of the application to update
-                
+
     -TimeoutMin <Int32>
         The timeout in minutes for the script to run
-                
+
     -HttpPort <Int32>
         The port to search for in the redirect URIs
-                
+
     -LogFile <String>
         The path to the log file
-        
+
     -TenantId <String>
         The tenant id of the application to update
-        
+
     -WhatIf [<SwitchParameter>]
         The switch to run the script in whatif mode
-        
+
     -------------------------- EXAMPLE 1 --------------------------
 
     PS > .\UpdateApplication.ps1 -WebApplicationId 'https://mysftestcluster.contoso.com' `
@@ -272,6 +282,8 @@ PARAMETERS
         -LogFile 'C:\temp\update-app.log' `
         -WhatIf
 ```
+
+</details>
 
 ## Update an existing Cluster
 
@@ -287,25 +299,27 @@ $ConfigObj = .\SetupClusterResource.ps1 -TenantId '<tenant_id>' `
 
 ### SetupClusterResource Parameters
 
+<details><summary>Click to expand</summary>
+
 ```powershell
 >help .\SetupClusterResource.ps1 -full
 
 PARAMETERS
     -ConfigObj <Hashtable>
         hashtable containing configuration values
-                
+
     -TenantId <String>
         tenant id of the application to update
-        
+
     -ClusterApplication <String>
         the application id of the cluster application
-        
+
     -ClientApplication <String>
         the application id of the client application
-        
+
     -ResourceGroupName <String>
         the resource group name of the cluster
-        
+
     -ClusterName <String>
         the name of the cluster
 
@@ -335,6 +349,8 @@ PARAMETERS
             -resourceGroupName 'mysftestcluster' `
             -clusterName 'mysftestcluster'
 ```
+
+</details>
 
 ## Resources
 
