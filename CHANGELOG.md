@@ -1,5 +1,16 @@
 ## service-fabric-aad-helpers Changelog
 
+### 23-11-15 231115
+
+- add param() to common.ps1
+
+### 23-11-14 231114
+
+- exposing microsoft graph client id and grant type as parameters
+  - $MGClientID
+  - $MGClientSecret
+  - $MGGrantType
+
 ### 23-11-12 231112
 
 - add support for Visual Studio client ids

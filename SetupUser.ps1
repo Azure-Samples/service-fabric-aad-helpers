@@ -44,6 +44,15 @@ Use Force switch to force removal of AAD user account if specifying -remove.
 .PARAMETER Remove
 Use Remove to remove AAD configuration and optionally user.
 
+.PARAMETER MGClientId
+Optional AAD client id for management group. If not provided, it will use default client id.
+
+.PARAMETER MGClientSecret
+Optional AAD client secret for management group.
+
+.PARAMETER MGGrantType
+Optional AAD grant type for management group. Default is 'device_code'.
+
 .EXAMPLE
 . Scripts\SetupUser.ps1 -ConfigObj $ConfigObj -UserName 'SFuser' -Password 'Test4321'
 
@@ -62,11 +71,11 @@ Setup up an admin user providing values for parameters
 Param
 (
     [Parameter(ParameterSetName = 'Setting', Mandatory = $true)]
-    [String]
+    [guid]
     $TenantId,
 
     [Parameter(ParameterSetName = 'Setting', Mandatory = $true)]
-    [String]
+    [guid]
     $WebApplicationId,
 
     [Parameter(ParameterSetName = 'Setting')]
@@ -117,11 +126,26 @@ Param
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
     [Switch]
-    $Force
+    $Force,
+    
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
+    [guid]
+    $MGClientId,
+
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
+    [string]
+    $MGClientSecret,
+
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
+    [string]
+    $MGGrantType
 )
 
 # load common functions
-. "$PSScriptRoot\Common.ps1"
+. "$PSScriptRoot\Common.ps1" @PSBoundParameters
 
 $graphAPIFormat = $global:ConfigObj.GraphAPIFormat
 $servicePrincipalId = $null

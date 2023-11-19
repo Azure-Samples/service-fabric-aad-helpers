@@ -6,22 +6,31 @@ Update applications in a Service Fabric cluster Entra tenant to migrate the web 
 version: 231112
 
 .PARAMETER WebApplicationId
-    The WebApplicationId of the application to update
+WebApplicationId of the application to update
 
 .PARAMETER TimeoutMin
-    The timeout in minutes for the script to run
+Timeout in minutes for the script to run
 
 .PARAMETER HttpPort
-    The port to search for in the redirect URIs
+Port to search for in the redirect URIs
 
 .PARAMETER LogFile
-    The path to the log file
+Path to the log file
 
 .PARAMETER TenantId
-    The tenant id of the application to update
+Tenant id of the application to update
 
 .PARAMETER WhatIf
-    The switch to run the script in whatif mode
+Switch to run the script in whatif mode
+
+.PARAMETER MGClientId
+Optional AAD client id for management group. If not provided, it will use default client id.
+
+.PARAMETER MGClientSecret
+Optional AAD client secret for management group.
+
+.PARAMETER MGGrantType
+Optional AAD grant type for management group. Default is 'device_code'.
 
 .EXAMPLE
     .\UpdateApplication.ps1 -WebApplicationId 'https://mysftestcluster.contoso.com' `
@@ -35,28 +44,45 @@ version: 231112
 [cmdletbinding()]
 Param
 (
-    [Parameter(ParameterSetName = 'Customize', Mandatory = $true)]	
-    [String]
+    [Parameter(ParameterSetName = 'Customize', Mandatory = $true)]
+    [guid]
     $WebApplicationId,
+
     [Parameter(ParameterSetName = 'Customize')]
     [int]
     $TimeoutMin = 5,
+
     [Parameter(ParameterSetName = 'Customize')]
     [int]
     $HttpPort = 19080,
+
     [Parameter(ParameterSetName = 'Customize')]
     [string]
     $LogFile,
+
     [Parameter(ParameterSetName = 'Customize', Mandatory = $true)]
-    [String]
+    [guid]
     $TenantId,
+
     [Parameter(ParameterSetName = 'Customize')]
     [Switch]
-    $WhatIf
+    $WhatIf,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [guid]
+    $MGClientId,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [string]
+    $MGClientSecret,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [string]
+    $MGGrantType
 )
 
 # load common functions
-. "$PSScriptRoot\Common.ps1"
+. "$PSScriptRoot\Common.ps1" @PSBoundParameters
 $graphAPIFormat = $global:ConfigObj.GraphAPIFormat
 
 function main () {
@@ -125,26 +151,26 @@ function update-Application() {
     }
 
     if ($WhatIf) {
-        Write-Host -ForegroundColor yellow `The following $webUrisToRemove.Length Web Redirect URIs would be moved to spa redirect uris` 
+        Write-Host -ForegroundColor yellow `The following $webUrisToRemove.Length Web Redirect URIs would be moved to spa redirect uris`
         foreach ($spa in $webUrisToRemove) {
             Write-Host $spa
-        }  
+        }
 
-        Write-Host -ForegroundColor yellow ` The following $newSpaUris.Length new spa redirect uris would be added` 
+        Write-Host -ForegroundColor yellow ` The following $newSpaUris.Length new spa redirect uris would be added`
         foreach ($spa in $newSpaUris) {
             Write-Host $spa
-        }  
+        }
     }
     else {
-        Write-Host -ForegroundColor yellow `Attempting to update $newSpaUris.Length from web redirect uris to spa redirect uris` 
+        Write-Host -ForegroundColor yellow `Attempting to update $newSpaUris.Length from web redirect uris to spa redirect uris`
 
         update-appRegistration -id $webApplication.id -webAppUpdate $webApp
 
         if ($global:graphStatusCode -eq 204) {
-            Write-Host -ForegroundColor yellow `Completed moving $newSpaUris.Length web redirect uris to spa redirect uris` 
+            Write-Host -ForegroundColor yellow `Completed moving $newSpaUris.Length web redirect uris to spa redirect uris`
             foreach ($spa in $newSpaUris) {
                 Write-Host $spa
-            }  
+            }
         }
         else {
             Write-Host -ForegroundColor Red `There was an issue updating the app registration`
@@ -160,7 +186,7 @@ function update-appRegistration($id, $webAppUpdate) {
 function get-appRegistration($WebApplicationUri) {
     # check for existing app by WebApplicationUri
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"appId:$WebApplicationUri`"")
-   
+
     $webApp = (invoke-graphApi -uri $uri -method 'get').value
 
     if (!$webApp) {

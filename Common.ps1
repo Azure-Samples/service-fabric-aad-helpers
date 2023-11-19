@@ -6,11 +6,21 @@ Common script, do not call directly.
 version: 231112
 
 #>
+param(
+    [guid]$TenantId,
+    [string]$ClusterName = $null,
+    [string]$Location = $null,
+    [guid]$MGClientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e', # well-known ps graph client id generated on connect
+    [string]$MGClientSecret = $null,
+    [string]$MGGrantType = 'urn:ietf:params:oauth:grant-type:device_code', #'client_credentials', #'authorization_code'
+    [guid]$WebApplicationId,
+    [switch]$Force
+)
 
 $global:graphStatusCode = $null
 $sleepSeconds = 1
 
-function main ([string]$tenantId = $null, [switch]$force) {
+function main () {
     # Regional settings
     switch ($Location) {
         "china" {
@@ -29,34 +39,34 @@ function main ([string]$tenantId = $null, [switch]$force) {
         }
     }
 
-    if (!$tenantId) {
-        $tenantId = $global:ConfigObj.TenantId
-    }
-    [guid]$tenantId = $tenantId
-    assert-notNull -obj $tenantId -msg 'tenantId required'
-
     # if cluster name is provided, use it to create app names
     if ($ClusterName) {
         $WebApplicationName = $ClusterName + "_Cluster"
         $NativeClientApplicationName = $ClusterName + "_Client"
     }
 
-    if (!$global:ConfigObj -or $force) {
+    if ($global:ConfigObj -and !$TenantId) {
+        $TenantId = $global:ConfigObj.TenantId
+    }
+    # don't continue if no tenantId
+    assert-notNull -obj $TenantId -msg 'tenantId required. do not call common.ps1 directly. use setup*.ps1 scripts'
+
+    if (!$global:ConfigObj -or $Force) {
+        # set / reset global config object defaults
         $global:ConfigObj = [ordered]@{
-            AuthString                  = $authString
             ClusterName                 = $ClusterName
-            GraphAPIFormat              = "$($resourceUrl)/v1.0/$($tenantId)/{0}"
+            GraphAPIFormat              = "$($resourceUrl)/v1.0/$($TenantId)/{0}"
             Headers                     = $null
             NativeClientAppId           = $null
             NativeClientApplicationName = $NativeClientApplicationName
             ServicePrincipalId          = $null
-            TenantId                    = $tenantId
+            TenantId                    = $TenantId
             WebAppId                    = $WebApplicationId
             WebApplicationName          = $WebApplicationName
         }
     }
 
-    $global:ConfigObj.Headers = get-RESTHeaders -tenantId $tenantId -authString $authString -force:$force
+    $global:ConfigObj.Headers = get-RESTHeaders -tenantId $TenantId -authString $authString -force:$Force
     return
 }
 
@@ -148,14 +158,20 @@ function get-restAuthGraph([guid]$tenantId, [guid]$clientId, $scope, $uri = $glo
     return $global:authresult
 }
 
-function get-RESTHeaders([guid]$tenantId, $authString = $global:ConfigObj.AuthString, [switch]$force) {
+function get-RESTHeaders([guid]$tenantId, 
+    [string]$authString,
+    [guid]$clientId = $MGClientId, 
+    [string]$clientSecret = $MGClientSecret, 
+    [string]$grantType = $MGGrantType, 
+    [switch]$force
+) {
     $token = $null
     if (get-cloudInstance) {
         $token = get-RESTHeadersCloud
     }
 
     if (!$token) {
-        $token = get-RESTHeadersGraph -tenantId $tenantId -authString $authString -force:$force
+        $token = get-RESTHeadersGraph -tenantId $tenantId -authString $authString -clientId $clientId -clientSecret $clientSecret -grantType $grantType -force:$force
     }
 
     $authHeader = @{
@@ -186,11 +202,11 @@ function get-RESTHeadersCloud($resourceUrl = $global:ConfigObj.ResourceUrl) {
     }
 }
 
-function get-RESTHeadersGraph([guid]$tenantId, $authString = $global:ConfigObj.AuthString, [switch]$force) {
+function get-RESTHeadersGraph([guid]$tenantId, [string]$authString, [guid]$clientId, [string]$clientSecret, [string]$grantType, [switch]$force) {
     assert-notNull -obj $tenantId -msg 'tenantId required'
     # Use common client
-    $clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e' # well-known ps graph client id generated on connect
-    $grantType = 'urn:ietf:params:oauth:grant-type:device_code' #'client_credentials', #'authorization_code'
+    #$clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e' # well-known ps graph client id generated on connect
+    #$grantType = 'urn:ietf:params:oauth:grant-type:device_code' #'client_credentials', #'authorization_code'
     $scope = 'user.read openid profile Application.ReadWrite.All User.ReadWrite.All Directory.ReadWrite.All Directory.Read.All Domain.Read.All AppRoleAssignment.ReadWrite.All'
     if (!$global:accessToken -or ($global:accessTokenExpiration -lt (get-date)) -or $force) {
         $accessToken = get-RESTTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -scope $scope -uri $authString
@@ -198,7 +214,7 @@ function get-RESTHeadersGraph([guid]$tenantId, $authString = $global:ConfigObj.A
     return $accessToken
 }
 
-function get-RESTTokenGraph([guid]$tenantId, [string]$grantType, [guid]$clientId, [string]$clientSecret, [string]$scope, $uri = $global:ConfigObj.AuthString) {
+function get-RESTTokenGraph([guid]$tenantId, [string]$grantType, [guid]$clientId, [string]$clientSecret, [string]$scope, [string]$uri) {
     # requires app registration
     # will retry on device code until complete
 
@@ -400,4 +416,5 @@ function write-errorMessage($exceptionRecord) {
     write-verbose  ($global:ConfigObj | convertto-json)
 }
 
-main -tenantId $TenantId -force:$force
+main
+

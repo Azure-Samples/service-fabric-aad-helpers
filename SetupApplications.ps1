@@ -59,6 +59,15 @@ Use Force switch to force new authorization to acquire new token.
 .PARAMETER Remove
 Use Remove to remove AAD configuration for provided cluster.
 
+.PARAMETER MGClientId
+Optional AAD client id for management group. If not provided, it will use default client id.
+
+.PARAMETER MGClientSecret
+Optional AAD client secret for management group.
+
+.PARAMETER MGGrantType
+Optional AAD grant type for management group. Default is 'device_code'.
+
 .EXAMPLE
 .\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' `
         -ClusterName 'MyCluster' `
@@ -98,7 +107,7 @@ Param
 (
     [Parameter(ParameterSetName = 'Customize', Mandatory = $true)]
     [Parameter(ParameterSetName = 'Prefix', Mandatory = $true)]
-    [String]
+    [guid]
     $TenantId,
 
     [Parameter(ParameterSetName = 'Customize')]
@@ -157,16 +166,32 @@ Param
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
-    [Switch]$Force,
+    [Switch]
+    $Force,
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
     [Switch]
-    $Remove
+    $Remove,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [guid]
+    $MGClientId,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [string]
+    $MGClientSecret,
+    
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [string]
+    $MGGrantType
 )
 
 # load common functions
-. "$PSScriptRoot\Common.ps1"
+. "$PSScriptRoot\Common.ps1" @PSBoundParameters
 
 $graphAPIFormat = $global:ConfigObj.GraphAPIFormat
 $sleepSeconds = 5
@@ -563,10 +588,10 @@ function get-oauthPermissionGrants($clientId) {
 function get-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]]$delegatedPermissionIds = $null, [bool]$remote = $false) {
     # check for existing preauthorized applications
     $tempWebApp = $webApp
-    if($remote){
+    if ($remote) {
         write-verbose "getting remote preauthorized applications"
         $tempWebApp = get-appRegistrationById -applicationId $webApp.id
-        if($webApp.api.preAuthorizedApplications -ine $tempWebApp.api.preAuthorizedApplications){
+        if ($webApp.api.preAuthorizedApplications -ine $tempWebApp.api.preAuthorizedApplications) {
             write-warning "preAuthorizedApplications are different. Using remote preAuthorizedApplications"
             #$webApp.api.preAuthorizedApplications = $tempWebApp.api.preAuthorizedApplications
         }
@@ -765,7 +790,7 @@ function remove-servicePrincipalNa() {
 
 function setup-Applications() {
     Write-Host 'TenantId = ' $TenantId
-    $ConfigObj.ClusterName = $clusterName
+    $ConfigObj.ClusterName = $ClusterName
     $ConfigObj.TenantId = $TenantId
     $webApp = $null
 
