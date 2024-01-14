@@ -103,7 +103,16 @@ PARAMETERS
     -Remove [<SwitchParameter>]
         Use Remove to remove AAD configuration for provided cluster.
 
-    -------------------------- EXAMPLE 1 --------------------------
+    -MGClientId <Guid>
+        Optional AAD client id for management group. If not provided, it will use default client id.
+
+    -MGClientSecret <String>
+        Optional AAD client secret for management group.
+
+    -MGGrantType <String>
+        Optional AAD grant type for management group. Default is 'device_code'.
+
+-------------------------- EXAMPLE 1 --------------------------
     PS > .\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' `
             -ClusterName 'MyCluster' `
             -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' `
