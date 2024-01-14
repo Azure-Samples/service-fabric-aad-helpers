@@ -165,6 +165,7 @@ function get-RESTHeaders([guid]$tenantId,
     [string]$grantType = $MGGrantType, 
     [switch]$force
 ) {
+    write-host "get-RESTHeaders -tenantId $tenantId -clientId $clientId" -ForegroundColor Green
     $token = $null
     if (get-cloudInstance) {
         $token = get-RESTHeadersCloud
@@ -204,12 +205,13 @@ function get-RESTHeadersCloud($resourceUrl = $global:ConfigObj.ResourceUrl) {
 
 function get-RESTHeadersGraph([guid]$tenantId, [string]$authString, [guid]$clientId, [string]$clientSecret, [string]$grantType, [switch]$force) {
     assert-notNull -obj $tenantId -msg 'tenantId required'
+    write-host "get-RESTHeadersGraph -tenantId $tenantId -authString $authString -clientId $clientId -clientSecret *** -grantType $grantType -force:$force" -ForegroundColor Green
     # Use common client
     #$clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e' # well-known ps graph client id generated on connect
     #$grantType = 'urn:ietf:params:oauth:grant-type:device_code' #'client_credentials', #'authorization_code'
     $scope = 'user.read openid profile Application.ReadWrite.All User.ReadWrite.All Directory.ReadWrite.All Directory.Read.All Domain.Read.All AppRoleAssignment.ReadWrite.All'
     if (!$global:accessToken -or ($global:accessTokenExpiration -lt (get-date)) -or $force) {
-        $accessToken = get-RESTTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -scope $scope -uri $authString
+        $accessToken = get-RESTTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -clientSecret $clientSecret -scope $scope -uri $authString
     }
     return $accessToken
 }
@@ -217,7 +219,7 @@ function get-RESTHeadersGraph([guid]$tenantId, [string]$authString, [guid]$clien
 function get-RESTTokenGraph([guid]$tenantId, [string]$grantType, [guid]$clientId, [string]$clientSecret, [string]$scope, [string]$uri) {
     # requires app registration
     # will retry on device code until complete
-
+    write-host "get-RESTTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -clientSecret *** -scope $scope -uri $authString"
     write-host "token request" -ForegroundColor Green
     $global:logonResult = $null
     $error.clear()
