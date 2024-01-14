@@ -4,21 +4,21 @@ test sf aad scripts
 #>
 param(
     [parameter(Mandatory = $true)]
-    $resourceGroupName,
-    $tenantId = "$((get-azcontext).tenant.id)",
-    $clusterName = $resourceGroupName,
+    [string]$resourceGroupName,
+    [string]$tenantId = "$((get-azcontext).tenant.id)",
+    [string]$clusterName = $resourceGroupName,
+    [string]$translog = "$pwd/tran-$($startTime.tostring('yyMMddhhmmss')).log",
     [switch]$setupReadonlyUser,
     [switch]$setupAdminUser,
     [switch]$setupClusterResource,
-    [switch]$enableVisualStudioAccess,
     [switch]$remove,
-    [switch]$force
+    [switch]$force,
+    [switch]$addVisualStudioAccess
 )
 
 $errorActionPreference = 'continue'
 $curDir = $pwd
 $startTime = get-date
-#$translog = "$pwd/tran-$($startTime.tostring('yyMMddhhmmss')).log"
 
 try {
     write-host "$(get-date) starting transcript $translog"
@@ -37,9 +37,9 @@ try {
         -ClusterName $clusterName ``
         -SpaApplicationReplyUrl $replyUrl ``
         -AddResourceAccess ``
-        -AddVisualStudioAccess:`$$enableVisualStudioAccess ``
         -WebApplicationUri $webApplicationUri ``
         -logFile $translog ``
+        -AddVisualStudioAccess:`$$addVisualStudioAccess ``
         -Verbose ``
         -force:`$$force ``
         -remove:`$$remove
@@ -49,8 +49,8 @@ try {
         -ClusterName $clusterName `
         -SpaApplicationReplyUrl $replyUrl `
         -AddResourceAccess `
-        -AddVisualStudioAccess:$enableVisualStudioAccess `
         -WebApplicationUri $webApplicationUri `
+        -AddVisualStudioAccess:$addVisualStudioAccess `
         -logFile $translog `
         -Verbose `
         -force:$force `
