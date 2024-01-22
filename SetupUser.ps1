@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-Setup user in a Service Fabric cluster Azure Active Directory tenant.
+Setup user in a Service Fabric cluster Entra tenant.
 
 .DESCRIPTION
 This script can create 2 types of users: Admin user assigned admin app role; Read-only user assigned readonly app role.
@@ -8,7 +8,7 @@ This script can create 2 types of users: Admin user assigned admin app role; Rea
 version: 2.0.1
 
 Prerequisites:
-1. An Azure Active Directory Tenant
+1. An Entra Tenant
 2. Service Fabric web and native client applications are setup. Or run SetupApplications.ps1.
 
 .PARAMETER TenantId
@@ -35,14 +35,23 @@ Used to set metadata for specific region (for example: china). Ignore it in glob
 .PARAMETER Domain
 Domain is the verified domain being used for user account configuration.
 
-.PARAMETER timeoutMin
+.PARAMETER TimeoutMin
 Script execution retry wait timeout in minutes. Default is 5 minutes. If script times out, it can be re-executed and will continue configuration as script is idempotent.
 
-.PARAMETER force
+.PARAMETER Force
 Use Force switch to force removal of AAD user account if specifying -remove.
 
-.PARAMETER remove
+.PARAMETER Remove
 Use Remove to remove AAD configuration and optionally user.
+
+.PARAMETER MGClientId
+Optional AAD client id for management group. If not provided, it will use default client id.
+
+.PARAMETER MGClientSecret
+Optional AAD client secret for management group.
+
+.PARAMETER MGGrantType
+Optional AAD grant type for management group. Default is 'device_code'.
 
 .EXAMPLE
 . Scripts\SetupUser.ps1 -ConfigObj $ConfigObj -UserName 'SFuser' -Password 'Test4321'
@@ -50,7 +59,11 @@ Use Remove to remove AAD configuration and optionally user.
 Setup up a read-only user with return SetupApplications.ps1
 
 .EXAMPLE
-. Scripts\SetupUser.ps1 -TenantId '7b25ab7e-cd25-4f0c-be06-939424dc9cc9' -WebApplicationId '9bf7c6f3-53ce-4c63-8ab3-928c7bf4200b' -UserName 'SFAdmin' -Password 'Test4321' -IsAdmin
+. Scripts\SetupUser.ps1 -TenantId '7b25ab7e-cd25-4f0c-be06-939424dc9cc9' `
+        -WebApplicationId '9bf7c6f3-53ce-4c63-8ab3-928c7bf4200b' `
+        -UserName 'SFAdmin' `
+        -Password 'Test4321' `
+        -IsAdmin
 
 Setup up an admin user providing values for parameters
 #>
@@ -58,11 +71,11 @@ Setup up an admin user providing values for parameters
 Param
 (
     [Parameter(ParameterSetName = 'Setting', Mandatory = $true)]
-    [String]
+    [guid]
     $TenantId,
 
     [Parameter(ParameterSetName = 'Setting', Mandatory = $true)]
-    [String]
+    [guid]
     $WebApplicationId,
 
     [Parameter(ParameterSetName = 'Setting')]
@@ -98,31 +111,43 @@ Param
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
     [int]
-    $timeoutMin = 5,
+    $TimeoutMin = 5,
 
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
     [string]
-    $logFile,
+    $LogFile,
 
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
     [Switch]
-    $remove,
+    $Remove,
 
     [Parameter(ParameterSetName = 'Setting')]
     [Parameter(ParameterSetName = 'ConfigObj')]
     [Switch]
-    $force
+    $Force,
+    
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
+    [guid]
+    $MGClientId,
+
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
+    [string]
+    $MGClientSecret,
+
+    [Parameter(ParameterSetName = 'Setting')]
+    [Parameter(ParameterSetName = 'ConfigObj')]
+    [string]
+    $MGGrantType
 )
 
-if ($ConfigObj) {
-    $TenantId = $ConfigObj.TenantId
-}
+# load common functions
+. "$PSScriptRoot\Common.ps1" @PSBoundParameters
 
-$headers = $null
-. "$PSScriptRoot\Common.ps1"
-$graphAPIFormat = $resourceUrl + "/v1.0/" + $TenantId + "/{0}"
+$graphAPIFormat = $global:ConfigObj.GraphAPIFormat
 $servicePrincipalId = $null
 $WebApplicationId = $null
 $sleepSeconds = 5
@@ -130,55 +155,19 @@ $sleepSeconds = 5
 function main () {
     try {
         if ($logFile) {
-            Start-Transcript -path $logFile -Force
+            Start-Transcript -path $logFile -Force | Out-Null
         }
 
-        enable-AADUser
+        setup-User
     }
     catch [Exception] {
-        $errorString = "exception: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"
-        write-error $errorString
+        write-errorMessage $psitem
     }
     finally {
         if ($logFile) {
-            Stop-Transcript
+            Stop-Transcript | Out-Null
         }
     }
-}
-
-function enable-AADUser() {
-    Write-Host 'TenantId = ' $TenantId
-
-    if ($ConfigObj) {
-        $WebApplicationId = $ConfigObj.WebAppId
-        $servicePrincipalId = $ConfigObj.ServicePrincipalId
-    }
-
-    # get verified domain
-    $domain = get-verifiedDomain
-    assert-notNull $domain 'domain is not found'
-
-    # set user name
-    $userName = set-userName
-
-    # cleanup
-    if ($remove) {
-        return (remove-user -userName $userName -domain $domain)
-    }
-
-    # get service principal id
-    $servicePrincipalId = get-servicePrincipalId -servicePrincipalId $servicePrincipalId
-    assert-notNull $servicePrincipalId 'Service principal of web application is not found'
-
-    # get app roles
-    $appRoles = get-appRoles
-    assert-notNull $appRoles 'AppRoles of web application is not found'
-
-    # check / create user
-    $newUser = add-user -userName $userName -domain $domain -appRoles $appRoles
-    assert-notNull $newUser "unable to create new user $userName"
-    write-host "user $userName created successfully"
-    return $newUser
 }
 
 function add-roleAssignment($userId, $roleId, $servicePrincipalId) {
@@ -337,7 +326,7 @@ function remove-user($userName, $domain) {
         return $true
     }
 
-    if (!$force -and (read-host "removing user $userName from Azure AD. do you want to continue?[y|n]") -imatch "n") {
+    if (!$Force -and (read-host "removing user $userName from Azure AD. do you want to continue?[y|n]") -imatch "n") {
         return
     }
 
@@ -347,7 +336,7 @@ function remove-user($userName, $domain) {
     write-host "removal complete" -ForegroundColor Green
 
     if ($result) {
-        $stopTime = set-stopTime $timeoutMin
+        $stopTime = set-stopTime $TimeoutMin
 
         do {
             $deleteResult = wait-forResult -functionPointer (get-item function:\get-user) `
@@ -360,6 +349,41 @@ function remove-user($userName, $domain) {
     }
 
     return $result
+}
+
+function setup-User() {
+    Write-Host 'TenantId = ' $TenantId
+
+    if ($ConfigObj) {
+        $WebApplicationId = $ConfigObj.WebAppId
+        $servicePrincipalId = $ConfigObj.ServicePrincipalId
+    }
+
+    # get verified domain
+    $domain = get-verifiedDomain
+    assert-notNull $domain 'domain is not found'
+
+    # set user name
+    $userName = set-userName
+
+    # cleanup
+    if ($Remove) {
+        return (remove-user -userName $userName -domain $domain)
+    }
+
+    # get service principal id
+    $servicePrincipalId = get-servicePrincipalId -servicePrincipalId $servicePrincipalId
+    assert-notNull $servicePrincipalId 'Service principal of web application is not found'
+
+    # get app roles
+    $appRoles = get-appRoles
+    assert-notNull $appRoles 'AppRoles of web application is not found'
+
+    # check / create user
+    $newUser = add-user -userName $userName -domain $domain -appRoles $appRoles
+    assert-notNull $newUser "unable to create new user $userName"
+    write-host "user $userName created successfully"
+    return $newUser
 }
 
 function set-userName() {

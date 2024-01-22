@@ -3,20 +3,75 @@
 Common script, do not call directly.
 
 .DESCRIPTION
-version: 2.0.3
+version: 231112
 
 #>
+param(
+    [guid]$TenantId,
+    [string]$ClusterName = $null,
+    [string]$Location = $null,
+    [guid]$MGClientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e', # well-known ps graph client id generated on connect
+    [string]$MGClientSecret = $null,
+    [string]$MGGrantType = 'urn:ietf:params:oauth:grant-type:device_code', #'client_credentials', #'authorization_code'
+    [guid]$WebApplicationId,
+    [switch]$Force
+)
+
+$global:graphStatusCode = $null
+$sleepSeconds = 1
 
 function main () {
-    if ($headers) {
-        return
+    # Regional settings
+    switch ($Location) {
+        "china" {
+            $resourceUrl = "https://graph.chinacloudapi.cn"
+            $authString = "https://login.partner.microsoftonline.cn"
+        }
+
+        "us" {
+            $resourceUrl = "https://graph.microsoft.us"
+            $authString = "https://login.microsoftonline.us"
+        }
+
+        default {
+            $resourceUrl = "https://graph.microsoft.com"
+            $authString = "https://login.microsoftonline.com"
+        }
     }
 
-    return get-RESTHeaders
+    # if cluster name is provided, use it to create app names
+    if ($ClusterName) {
+        $WebApplicationName = $ClusterName + "_Cluster"
+        $NativeClientApplicationName = $ClusterName + "_Client"
+    }
+
+    if ($global:ConfigObj -and !$TenantId) {
+        $TenantId = $global:ConfigObj.TenantId
+    }
+    # don't continue if no tenantId
+    assert-notNull -obj $TenantId -msg 'tenantId required. do not call common.ps1 directly. use setup*.ps1 scripts'
+
+    if (!$global:ConfigObj -or $Force) {
+        # set / reset global config object defaults
+        $global:ConfigObj = [ordered]@{
+            ClusterName                 = $ClusterName
+            GraphAPIFormat              = "$($resourceUrl)/v1.0/$($TenantId)/{0}"
+            Headers                     = $null
+            NativeClientAppId           = $null
+            NativeClientApplicationName = $NativeClientApplicationName
+            ServicePrincipalId          = $null
+            TenantId                    = $TenantId
+            WebAppId                    = $WebApplicationId
+            WebApplicationName          = $WebApplicationName
+        }
+    }
+
+    $global:ConfigObj.Headers = get-RESTHeaders -tenantId $TenantId -authString $authString -force:$Force
+    return
 }
 
 function assert-notNull($obj, $msg) {
-    if ($obj -eq $null -or $obj.Length -eq 0) { 
+    if ($obj -eq $null -or $obj.Length -eq 0) {
         Write-Error $msg
         #exit
         throw "assertion failure: object:$obj message:$msg"
@@ -58,7 +113,7 @@ function confirm-statusCodeSuccess($statusCode, $method) {
             break
         }
     }
-    
+
     if ($retval) {
         write-host "$method successful." -ForegroundColor Green
     }
@@ -74,7 +129,7 @@ function get-cloudInstance() {
     return $isCloudInstance
 }
 
-function get-restAuthGraph($tenantId, $clientId, $scope, $uri = 'https://login.microsoftonline.com') {
+function get-restAuthGraph([guid]$tenantId, [guid]$clientId, $scope, $uri = $global:ConfigObj.AuthString) {
     # authenticate to Graph using device code
 
     write-host "auth request" -ForegroundColor Green
@@ -92,7 +147,7 @@ function get-restAuthGraph($tenantId, $clientId, $scope, $uri = 'https://login.m
         Method      = 'post'
         URI         = $uri
     }
-    
+
     Write-Verbose ($params | convertto-json)
     $error.Clear()
     write-host "invoke-restMethod $uri" -ForegroundColor Cyan
@@ -103,16 +158,23 @@ function get-restAuthGraph($tenantId, $clientId, $scope, $uri = 'https://login.m
     return $global:authresult
 }
 
-function get-RESTHeaders() {
+function get-RESTHeaders([guid]$tenantId, 
+    [string]$authString,
+    [guid]$clientId = $MGClientId, 
+    [string]$clientSecret = $MGClientSecret, 
+    [string]$grantType = $MGGrantType, 
+    [switch]$force
+) {
+    write-host "get-RESTHeaders -tenantId $tenantId -clientId $clientId" -ForegroundColor Green
     $token = $null
     if (get-cloudInstance) {
         $token = get-RESTHeadersCloud
     }
-    
+
     if (!$token) {
-        $token = get-RESTHeadersGraph -tenantId $TenantId
+        $token = get-RESTHeadersGraph -tenantId $tenantId -authString $authString -clientId $clientId -clientSecret $clientSecret -grantType $grantType -force:$force
     }
-    
+
     $authHeader = @{
         'Content-Type'     = 'application/json'
         'Authorization'    = 'Bearer ' + $token
@@ -123,7 +185,7 @@ function get-RESTHeaders() {
     return $authHeader
 }
 
-function get-RESTHeadersCloud() { 
+function get-RESTHeadersCloud($resourceUrl = $global:ConfigObj.ResourceUrl) {
     # https://docs.microsoft.com/en-us/azure/cloud-shell/msi-authorization
     try {
         # will fail on local cloud shell
@@ -141,24 +203,27 @@ function get-RESTHeadersCloud() {
     }
 }
 
-function get-RESTHeadersGraph($tenantId) {
-    # Use common client 
-    $clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e' # well-known ps graph client id generated on connect
-    $grantType = 'urn:ietf:params:oauth:grant-type:device_code' #'client_credentials', #'authorization_code'
+function get-RESTHeadersGraph([guid]$tenantId, [string]$authString, [guid]$clientId, [string]$clientSecret, [string]$grantType, [switch]$force) {
+    assert-notNull -obj $tenantId -msg 'tenantId required'
+    write-host "get-RESTHeadersGraph -tenantId $tenantId -authString $authString -clientId $clientId -clientSecret *** -grantType $grantType -force:$force" -ForegroundColor Green
+    # Use common client
+    #$clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e' # well-known ps graph client id generated on connect
+    #$grantType = 'urn:ietf:params:oauth:grant-type:device_code' #'client_credentials', #'authorization_code'
     $scope = 'user.read openid profile Application.ReadWrite.All User.ReadWrite.All Directory.ReadWrite.All Directory.Read.All Domain.Read.All AppRoleAssignment.ReadWrite.All'
     if (!$global:accessToken -or ($global:accessTokenExpiration -lt (get-date)) -or $force) {
-        $accessToken = get-RESTTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -scope $scope -uri $authString
+        $accessToken = get-RESTTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -clientSecret $clientSecret -scope $scope -uri $authString
     }
     return $accessToken
 }
 
-function get-RESTTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $scope, $uri = 'https://login.microsoftonline.com') {
+function get-RESTTokenGraph([guid]$tenantId, [string]$grantType, [guid]$clientId, [string]$clientSecret, [string]$scope, [string]$uri) {
     # requires app registration
     # will retry on device code until complete
-
+    write-host "get-RESTTokenGraph -tenantId $tenantId -grantType $grantType -clientId $clientId -clientSecret *** -scope $scope -uri $authString"
     write-host "token request" -ForegroundColor Green
     $global:logonResult = $null
     $error.clear()
+    $authString = $uri
     $uri = "$uri/$tenantId/oauth2/v2.0/token"
     $headers = @{
         'content-type' = 'application/x-www-form-urlencoded'
@@ -170,14 +235,14 @@ function get-RESTTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $sc
         $Body = @{
             'client_id'   = $clientId
             'device_code' = $global:authresult.device_code
-            'grant_type'  = $grantType 
+            'grant_type'  = $grantType
         }
     }
     elseif ($grantType -ieq 'client_credentials') {
         $Body = @{
             'client_id'     = $clientId
             'client_secret' = $clientSecret
-            'grant_type'    = $grantType 
+            'grant_type'    = $grantType
         }
     }
     elseif ($grantType -ieq 'authorization_code') {
@@ -185,12 +250,12 @@ function get-RESTTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $sc
         $Body = @{
             'client_id'  = $clientId
             'code'       = $global:authresult.code
-            'grant_type' = $grantType 
+            'grant_type' = $grantType
         }
     }
 
     $params = @{
-        Headers = $headers 
+        Headers = $headers
         Body    = $Body
         Method  = 'Post'
         URI     = $uri
@@ -213,7 +278,7 @@ function get-RESTTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $sc
             return $global:accessToken
         }
         catch [System.Exception] {
-            $errorMessage = ($_ | convertfrom-json)
+            $errorMessage = ($psitem | convertfrom-json)
 
             if ($errorMessage -and ($errorMessage.error -ieq 'authorization_pending')) {
                 write-host "waiting for device token result..." -ForegroundColor Yellow
@@ -233,7 +298,7 @@ function get-RESTTokenGraph($tenantId, $grantType, $clientId, $clientSecret, $sc
     return $global:accessToken
 }
 
-function invoke-graphApiCall($uri, $headers = $global:defaultHeaders, $body = '', $method = 'post') {
+function invoke-graphApiCall($uri, $headers = $global:ConfigObj.Headers, $body = '', $method = 'post') {
     try {
         $error.clear()
         $global:graphStatusCode = $null
@@ -256,7 +321,10 @@ function invoke-graphApiCall($uri, $headers = $global:defaultHeaders, $body = ''
         $global:graphStatusCode = $result.StatusCode
 
         if (confirm-statusCodeSuccess -statusCode $global:graphStatusCode -method $method) {
-            return $resultObj
+            if ($resultObj) {
+                return $resultObj
+            }
+            return $true
         }
 
         return $null
@@ -274,13 +342,18 @@ function invoke-graphApiCall($uri, $headers = $global:defaultHeaders, $body = ''
             Write-Warning "invoke-graphApiCall response status: $global:graphStatusCode"
         }
 
+        if (!$global:graphStatusCode) {
+            # not a web exception
+            throw $psitem.Exception
+        }
+
         return $null
     }
 }
 
-function invoke-graphApi($uri, $headers = $global:defaultHeaders, $body = '', $method = 'post', [switch]$retry) {
+function invoke-graphApi($uri, $headers = $global:ConfigObj.Headers, $body = '', $method = 'post', [switch]$retry) {
     $global:graphStatusCode = 0
-    $stopTime = set-stopTime $timeoutMin
+    $stopTime = set-stopTime $TimeoutMin
     $count = 0
 
     while ((get-date) -le $stopTime) {
@@ -306,14 +379,14 @@ function set-stopTime($minutes) {
 
 function wait-forResult([management.automation.functionInfo]$functionPointer, [string]$message, [datetime]$stopTime = [datetime]::MinValue, [switch]$waitForNullResult) {
     if ($stopTime -eq [datetime]::MinValue) {
-        $stopTime = set-stopTime $timeoutMin
+        $stopTime = set-stopTime $TimeoutMin
     }
 
     while ((get-date) -le $stopTime) {
 
         $result = . $functionPointer.scriptblock @args
         write-host "$message`r`nfunction:$($functionPointer.Name)`r`nargs:$args`r`nresult:$result" -ForegroundColor Magenta
-        
+
         if ($result -and !$waitForNullResult) {
             write-host "returning result:$($result | convertto-json)"
             return $result
@@ -329,31 +402,21 @@ function wait-forResult([management.automation.functionInfo]$functionPointer, [s
     assert-notNull -obj $result -msg "timed out waiting for:$message"
 }
 
+function write-errorMessage($exceptionRecord) {
+    $errorString = "exception: 
+            $($exceptionRecord.Exception.Response.StatusCode.value__)
 
-# Regional settings
-switch ($Location) {
-    "china" {
-        $resourceUrl = "https://graph.chinacloudapi.cn"
-        $authString = "https://login.partner.microsoftonline.cn"
-    }
-    
-    "us" {
-        $resourceUrl = "https://graph.microsoft.us"
-        $authString = "https://login.microsoftonline.us"
-    }
-
-    default {
-        $resourceUrl = "https://graph.microsoft.com"
-        $authString = "https://login.microsoftonline.com"
-    }
+            exception message:
+            $($exceptionRecord.Exception.Message)
+            
+            $($exceptionRecord.ScriptStackTrace)
+            
+            use -force switch to force new authorization to acquire new token.
+            set `$global:ConfigObj to null to reset configuration.
+        "
+    write-error $errorString
+    write-verbose  ($global:ConfigObj | convertto-json)
 }
 
-$global:graphStatusCode = $null
-$sleepSeconds = 1
-$headers = main
-$global:defaultHeaders = $headers
+main
 
-if ($ClusterName) {
-    $WebApplicationName = $ClusterName + "_Cluster"
-    $NativeClientApplicationName = $ClusterName + "_Client"
-}
