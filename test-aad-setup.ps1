@@ -1,6 +1,55 @@
 <#
-test sf aad scripts
+.SYNOPSIS
+    script used to test entra / aad setup scripts for service fabric cluster with aad integration enabled
+.DESCRIPTION
+    script used to test entra / aad setup scriptis for service fabric cluster with aad integration enabled.
+    requires test service fabric cluster
+    requires admin access to azure ad / entra / graph
 
+    Typical usage: .\test-aad-setup.ps1 -resourceGroupName 'myrg' -clusterName 'mysfcluster' -setupReadonlyUser -setupAdminUser -setupClusterResource -addVisualStudioAccess
+        executes: .\SetupApplications.ps1 -TenantId $tenantId -ClusterName $clusterName -SpaApplicationReplyUrl $replyUrl -AddResourceAccess -WebApplicationUri $webApplicationUri -AddVisualStudioAccess:$addVisualStudioAccess -logFile $translog -Verbose -force:$force -remove:$remove
+        executes: .\SetupUser.ps1 -ConfigObj $ConfigObj -UserName 'TestReadOnly' -Password 'P@ssword!123' -IsReadOnly -Verbose -logFile $translog -remove:$remove -force:$force
+        executes: .\SetupUser.ps1 -ConfigObj $ConfigObj -UserName 'TestAdmin' -Password 'P@ssword!123' -IsAdmin -Verbose -logFile $translog -remove:$remove -force:$force
+        executes: .\SetupClusterResource.ps1 -resourceGroupName $resourceGroupName -ConfigObj $($ConfigObj | convertto-json -depth 99)
+
+.EXAMPLE
+    .\test-aad-setup.ps1 -resourceGroupName 'myrg'
+.EXAMPLE
+    .\test-aad-setup.ps1 -resourceGroupName 'myrg' -clusterName 'mysfcluster'
+.EXAMPLE
+    .\test-aad-setup.ps1 -resourceGroupName 'myrg' -clusterName 'mysfcluster' -setupReadonlyUser
+.EXAMPLE
+    .\test-aad-setup.ps1 -resourceGroupName 'myrg' -clusterName 'mysfcluster' -setupReadonlyUser -setupAdminUser
+.EXAMPLE
+    .\test-aad-setup.ps1 -resourceGroupName 'myrg' -clusterName 'mysfcluster' -setupReadonlyUser -setupAdminUser -setupClusterResource
+.EXAMPLE
+    .\test-aad-setup.ps1 -resourceGroupName 'myrg' -clusterName 'mysfcluster' -setupReadonlyUser -setupAdminUser -setupClusterResource -addVisualStudioAccess
+.EXAMPLE
+    .\test-aad-setup.ps1 -resourceGroupName 'myrg' -clusterName 'mysfcluster' -setupReadonlyUser -setupAdminUser -setupClusterResource -addVisualStudioAccess -MGClientId '14d82eec-204b-4c2f-b7e8-296a70dab67e' -MGClientSecret 'mysecret'
+.PARAMETER resourceGroupName
+    resource group name of the test cluster
+.PARAMETER tenantId
+    tenant id for resource group. defaults to current az context tenant id
+.PARAMETER clusterName
+    test cluster name if different than resource group name
+.PARAMETER setupReadonlyUser
+    setup readonly user 'TestReadOnly' with read only access to cluster
+.PARAMETER setupAdminUser
+    setup test admin user 'TestAdmin' with read / write access to cluster
+.PARAMETER setupClusterResource
+    setup cluster resource with new application registration client id
+.PARAMETER addVisualStudioAccess
+    add visual studio application registration ids to the cluster resource for deployment access from visual studio
+.PARAMETER remove
+    remove
+.PARAMETER force
+    force
+.PARAMETER MGClientId
+    optional Microsoft Graph Client Id if not using default
+.PARAMETER MGClientSecret
+    optional Microsoft Graph Client Secret
+.PARAMETER MGGrantType
+    optional Microsoft Graph Grant Type (default: urn:ietf:params:oauth:grant-type:device_code)
 #>
 param(
     [parameter(Mandatory = $true)]
@@ -35,13 +84,13 @@ function main() {
 
         #$webApplicationUri = 'https://mysftestcluster.contoso.com' # <--- must be verified domain due to AAD changes
         $webApplicationUri = "api://$tenantId/$clusterName" # <--- does not have to be verified domain
-            
+
         if ($MGClientSecret) {
             setup-applicationMG
 
             write-host "ConfigObj:" -ForegroundColor Cyan
             $ConfigObj
-    
+
             if ($setupReadonlyUser) {
                 setup-readOnlyUserMG
             }
@@ -51,14 +100,14 @@ function main() {
 
             write-host "ConfigObj:" -ForegroundColor Cyan
             $ConfigObj
-    
+
         }
         else {
             setup-application
 
             write-host "ConfigObj:" -ForegroundColor Cyan
             $ConfigObj
-    
+
             if ($setupReadonlyUser) {
                 setup-readOnlyUser
             }
@@ -68,9 +117,9 @@ function main() {
 
             write-host "ConfigObj:" -ForegroundColor Cyan
             $ConfigObj
-    
+
         }
-    
+
         if ($setupClusterResource) {
             write-host ".\SetupClusterResource.ps1 -resourceGroupName $resourceGroupName
             -ConfigObj $($ConfigObj | convertto-json -depth 99)
@@ -156,7 +205,7 @@ function setup-readOnlyUser() {
     -force:`$$force
     -ConfigObj $($ConfigObj | convertto-json -depth 99)
 " -ForegroundColor Cyan
-    
+
     .\SetupUser.ps1 -ConfigObj $ConfigObj `
         -UserName 'TestReadOnly' `
         -Password 'P@ssword!123' `
@@ -182,7 +231,7 @@ function setup-readOnlyUserMG() {
     -MGClientSecret $MGClientSecret `
     -MGGrantType $MGGrantType
 " -ForegroundColor Cyan
-        
+
     .\SetupUser.ps1 -ConfigObj $ConfigObj `
         -UserName 'TestReadOnly' `
         -Password 'P@ssword!123' `
@@ -208,7 +257,7 @@ function setup-adminUser() {
     -force:`$$force
     -ConfigObj $($ConfigObj | convertto-json -depth 99)
 " -ForegroundColor Cyan
-    
+
     .\SetupUser.ps1 -ConfigObj $ConfigObj `
         -UserName 'TestAdmin' `
         -Password 'P@ssword!123' `
@@ -234,7 +283,7 @@ function setup-adminUserMG() {
     -MGClientSecret $MGClientSecret `
     -MGGrantType $MGGrantType
 " -ForegroundColor Cyan
-    
+
     .\SetupUser.ps1 -ConfigObj $ConfigObj `
         -UserName 'TestAdmin' `
         -Password 'P@ssword!123' `
