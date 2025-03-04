@@ -1,12 +1,12 @@
 ﻿<#
 .SYNOPSIS
-Setup applications in a Service Fabric cluster Azure Active Directory tenant.
+Setup applications in a Service Fabric cluster Entra tenant.
 
 .DESCRIPTION
-version: 2.0.1
+version: 231112
 
 Prerequisites:
-1. An Azure Active Directory tenant.
+1. An Entra tenant.
 2. A Global Admin user within tenant.
 
 .PARAMETER TenantId
@@ -23,7 +23,7 @@ Example: 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster'
 
 .PARAMETER SpaApplicationReplyUrl
 Reply URL of spa application. Format: https://<Domain name of cluster>:<Service Fabric Http gateway port>
-Example: 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
+Example: 'https://mycluster.westus.cloudapp.azure.com:19080/Explorer/index.html'
 
 .PARAMETER NativeClientApplicationName
 Name of native client application representing client.
@@ -35,47 +35,84 @@ A friendly Service Fabric cluster name. Application settings generated from clus
 Used to set metadata for specific region (for example: china, germany). Ignore it in global environment.
 
 .PARAMETER AddResourceAccess
-Used to add the cluster application's resource access to "Windows Azure Active Directory" application explicitly when AAD is not able to add automatically. This may happen when the user account does not have adequate permission under this subscription.
+Used to add the cluster applications resource access to Entra application explicitly when AAD is not able to add automatically. This may happen when the user account does not have adequate permission under this subscription.
 
-.PARAMETER signInAudience
+.PARAMETER AddVisualStudioAccess
+Used to add the Visual Studio MSAL client ids to the cluster application
+    'https://learn.microsoft.com/en-us/azure/service-fabric/service-fabric-manage-application-in-visual-studio'
+    Visual Studio 2022 and future versions: '04f0c124-f2bc-4f59-8241-bf6df9866bbd'
+    Visual Studio 2019 and earlier: '872cd9fa-d31f-45e0-9eab-6e460a02d1f1'
+
+.PARAMETER SignInAudience
 Sign in audience option for selection of Applicaiton AAD tenant configuration type. Default selection is 'AzureADMyOrg'
 'AzureADMyOrg', 'AzureADMultipleOrgs', 'AzureADandPersonalMicrosoftAccount'
 
-.PARAMETER timeoutMin
+.PARAMETER TimeoutMin
 Script execution retry wait timeout in minutes. Default is 5 minutes. If script times out, it can be re-executed and will continue configuration as script is idempotent.
 
-.PARAMETER force
+.PARAMETER LogFile
+Log file path to save script transcript logs.
+
+.PARAMETER Force
 Use Force switch to force new authorization to acquire new token.
 
-.PARAMETER remove
+.PARAMETER Remove
 Use Remove to remove AAD configuration for provided cluster.
 
+.PARAMETER MGClientId
+Optional AAD client id for management group. If not provided, it will use default client id.
+
+.PARAMETER MGClientSecret
+Optional AAD client secret for management group.
+
+.PARAMETER MGGrantType
+Optional AAD grant type for management group. Default is 'device_code'.
+
 .EXAMPLE
-. Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' -SpaApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
+.\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' `
+        -ClusterName 'MyCluster' `
+        -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' `
+        -SpaApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
 
 Setup tenant with default settings generated from a friendly cluster name.
 
 .EXAMPLE
-. Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -WebApplicationName 'SFWeb' -WebApplicationUri 'https://mycluster.contoso.com' -SpaApplicationReplyUrl 'https://mycluster.contoso:19080/explorer/index.html' -NativeClientApplicationName 'SFnative'
+.\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' `
+        -WebApplicationName 'SFWeb' `
+        -WebApplicationUri 'https://mycluster.contoso.com' `
+        -SpaApplicationReplyUrl 'https://mycluster.contoso:19080/explorer/index.html' `
+        -NativeClientApplicationName 'SFnative'
 
 Setup tenant with explicit application settings.
 
 .EXAMPLE
-. $configObj = Scripts\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' -ClusterName 'MyCluster' -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' -SpaApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
+$ConfigObj = .\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' `
+        -ClusterName 'MyCluster' `
+        -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' `
+        -SpaApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html'
 
 Setup and save the setup result into a temporary variable to pass into SetupUser.ps1
+
+.EXAMPLE
+.\SetupApplications.ps1 -TenantId '4f812c74-978b-4b0e-acf5-06ffca635c0e' `
+        -WebApplicationUri 'api://4f812c74-978b-4b0e-acf5-06ffca635c0e/mycluster' `
+        -SpaApplicationReplyUrl 'https://mycluster.westus.cloudapp.azure.com:19080/explorer/index.html' `
+        -AddResourceAccess `
+        -AddVisualStudioAccess
+
+Setup tenant with explicit application settings and add explicit resource access to Entra application.
 #>
 [cmdletbinding()]
 Param
 (
     [Parameter(ParameterSetName = 'Customize', Mandatory = $true)]
     [Parameter(ParameterSetName = 'Prefix', Mandatory = $true)]
-    [String]
+    [guid]
     $TenantId,
 
-    [Parameter(ParameterSetName = 'Customize')]	
+    [Parameter(ParameterSetName = 'Customize')]
     [String]
-    $webApplicationName,
+    $WebApplicationName,
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
@@ -86,7 +123,7 @@ Param
     [Parameter(ParameterSetName = 'Prefix', Mandatory = $true)]
     [String]
     $SpaApplicationReplyUrl,
-	
+
     [Parameter(ParameterSetName = 'Customize')]
     [String]
     $NativeClientApplicationName,
@@ -108,53 +145,77 @@ Param
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
+    [Switch]
+    $AddVisualStudioAccess,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
     [String]
     [ValidateSet('AzureADMyOrg', 'AzureADMultipleOrgs', 'AzureADandPersonalMicrosoftAccount')]
-    $signInAudience = 'AzureADMyOrg',
+    $SignInAudience = 'AzureADMyOrg',
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
     [int]
-    $timeoutMin = 5,
+    $TimeoutMin = 5,
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
     [string]
-    $logFile,
-
-    [Parameter(ParameterSetName = 'Customize')]
-    [Parameter(ParameterSetName = 'Prefix')]
-    [Switch]$force,
+    $LogFile,
 
     [Parameter(ParameterSetName = 'Customize')]
     [Parameter(ParameterSetName = 'Prefix')]
     [Switch]
-    $remove
+    $Force,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [Switch]
+    $Remove,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [guid]
+    $MGClientId,
+
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [string]
+    $MGClientSecret,
+    
+    [Parameter(ParameterSetName = 'Customize')]
+    [Parameter(ParameterSetName = 'Prefix')]
+    [string]
+    $MGGrantType
 )
 
-$headers = $null
-. "$PSScriptRoot\Common.ps1"
-$graphAPIFormat = $resourceUrl + "/v1.0/" + $TenantId + "/{0}"
-$global:ConfigObj = @{}
+# load common functions
+. "$PSScriptRoot\Common.ps1" @PSBoundParameters
+
+$graphAPIFormat = $global:ConfigObj.GraphAPIFormat
 $sleepSeconds = 5
 $msGraphUserReadAppId = '00000003-0000-0000-c000-000000000000'
 $msGraphUserReadId = 'e1fe6dd8-ba31-4d61-89e7-88639da4683d'
+$visualStudioClientIds = @(
+    '04f0c124-f2bc-4f59-8241-bf6df9866bbd', # Visual Studio 2022 and future versions
+    '872cd9fa-d31f-45e0-9eab-6e460a02d1f1'  # Visual Studio 2019 and earlier
+)
 
 function main () {
     try {
-        if ($logFile) {
-            Start-Transcript -path $logFile -Force
+        if ($LogFile) {
+            Start-Transcript -path $LogFile -Force | Out-Null
         }
 
-        enable-AAD
+        setup-Applications
     }
     catch [Exception] {
-        $errorString = "exception: $($psitem.Exception.Response.StatusCode.value__)`r`nexception:`r`n$($psitem.Exception.Message)`r`n$($error | out-string)`r`n$($psitem.ScriptStackTrace)"
-        write-error $errorString
+        write-errorMessage $psitem
     }
     finally {
-        if ($logFile) {
-            Stop-Transcript
+        if ($LogFile) {
+            Stop-Transcript | Out-Null
         }
     }
 }
@@ -187,41 +248,36 @@ function add-appRegistration($WebApplicationUri, $SpaApplicationReplyUrl, $requi
             enableIdTokenIssuance     = $true
         }
     }
-    
+
     $spaAppResource = @{
-        redirectUris          = @($SpaApplicationReplyUrl)
+        redirectUris = @($SpaApplicationReplyUrl)
     }
-    
+
+    $webApp = @{
+        displayName            = $webApplicationName
+        signInAudience         = $SignInAudience
+        identifierUris         = @($WebApplicationUri)
+        defaultRedirectUri     = $SpaApplicationReplyUrl
+        appRoles               = $appRole
+        requiredResourceAccess = $null
+        spa                    = $spaAppResource
+        web                    = $webAppResource
+        api                    = @{
+            preAuthorizedApplications = @()
+            oauth2PermissionScopes    = @()
+        }
+    }
+
     if ($AddResourceAccess) {
-        $webApp = @{
-            displayName            = $webApplicationName
-            signInAudience         = $signInAudience
-            identifierUris         = @($WebApplicationUri)
-            defaultRedirectUri     = $SpaApplicationReplyUrl
-            appRoles               = $appRole
-            requiredResourceAccess = $requiredResourceAccess
-            spa                    = $spaAppResource
-            web                    = $webAppResource
-        }
-    }
-    else {
-        $webApp = @{
-            displayName        = $webApplicationName
-            signInAudience     = $signInAudience
-            identifierUris     = @($WebApplicationUri)
-            defaultRedirectUri = $SpaApplicationReplyUrl
-            appRoles           = $appRole
-            spa                = $spaAppResource
-            web                = $webAppResource
-        }
+        $webApp.requiredResourceAccess = $requiredResourceAccess
     }
 
     # add
     $webApp = invoke-graphApi -retry -uri $uri -body $webApp -method 'post'
 
     if ($webApp) {
-        $stopTime = set-stopTime $timeoutMin
-        
+        $stopTime = set-stopTime $TimeoutMin
+
         while (!($webApp.api.oauth2PermissionScopes.gethashcode())) {
             $webApp = wait-forResult -functionPointer (get-item function:\get-appRegistration) `
                 -message "waiting for app registration completion" `
@@ -238,7 +294,7 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
     #Create Native Client Application
     $uri = [string]::Format($graphAPIFormat, "applications")
     $nativeAppResourceAccess = @($requiredResourceAccess.Clone())
-    
+
     # todo not working in ms sub tenant
     # could be because of resource not existing?
     $nativeAppResourceAccess += @{
@@ -251,10 +307,10 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
 
     $nativeAppResource = @{
         publicClient           = @{
-            redirectUris = @("urn:ietf:wg:oauth:2.0:oob") 
+            redirectUris = @("urn:ietf:wg:oauth:2.0:oob")
         }
         displayName            = $NativeClientApplicationName
-        signInAudience         = $signInAudience
+        signInAudience         = $SignInAudience
         isFallbackPublicClient = $true
         requiredResourceAccess = $nativeAppResourceAccess
     }
@@ -273,7 +329,7 @@ function add-nativeClient($webApp, $requiredResourceAccess, $oauthPermissionsId)
 
 function add-oauthPermissions($webApp, $webApplicationName) {
     write-host "adding user_impersonation scope"
-    $patchApplicationUri = $graphAPIFormat -f ("applications/{0}" -f $webApp.Id)
+    $uri = [string]::format($graphAPIFormat, "applications/$($webApp.Id)")
     $webApp.api.oauth2PermissionScopes = @($webApp.api.oauth2PermissionScopes)
     $userImpersonationScopeId = [guid]::NewGuid()
     $webApp.api.oauth2PermissionScopes += @{
@@ -289,11 +345,11 @@ function add-oauthPermissions($webApp, $webApplicationName) {
 
     $null = wait-forResult -functionPointer (get-item function:\invoke-graphApi) `
         -message "waiting for patch application uri to be available" `
-        -uri $patchApplicationUri `
+        -uri $uri `
         -method get
 
     # timing issue even when call above successful
-    $result = invoke-graphApi -retry -uri $patchApplicationUri -method 'patch' -body @{
+    $result = invoke-graphApi -retry -uri $uri -method 'patch' -body @{
         'api' = @{
             "oauth2PermissionScopes" = $webApp.api.oauth2PermissionScopes
         }
@@ -306,6 +362,50 @@ function add-oauthPermissions($webApp, $webApplicationName) {
     }
 
     return $userImpersonationScopeId
+}
+
+function add-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]]$delegatedPermissionIds) {
+    #Create PreAuthorized Applications
+    $uri = [string]::format($graphAPIFormat, "applications/$($webApp.Id)")
+    $preAuthorizedApplications = [collections.arraylist]::new()
+
+    foreach ($applicationId in $applicationIds) {
+        # check for existing preauthorized applications and merge permissions
+        $mergedPermissions = [collections.arraylist]::new()
+        [void]$mergedPermissions.AddRange($delegatedPermissionIds)
+
+        $existingApplication = get-preauthorizedApplications -webApp $webApp -applicationIds $applicationId
+        if ($existingApplication) {
+            foreach ($existingPermission in $existingApplication.delegatedPermissionIds) {
+                if (!$mergedPermissions -contains $existingPermission) {
+                    [void]$mergedPermissions.Add($existingPermission)
+                }
+            }
+        }
+    
+        $preAuthorizedApplications.Add(@{
+                appId                  = $applicationId
+                delegatedPermissionIds = $mergedPermissions
+            })
+    }
+
+    $webApp.api.preAuthorizedApplications = $preAuthorizedApplications
+    $result = invoke-graphApi -retry -uri $uri -method 'patch' -body @{
+        'api' = @{
+            "preAuthorizedApplications" = $webApp.api.preAuthorizedApplications
+        }
+    }
+
+    if ($result) {
+        $null = wait-forResult -functionPointer (get-item function:\get-preauthorizedApplications) `
+            -message "waiting for preauthorized applications completion" `
+            -webApp $webApp `
+            -applicationIds $applicationIds `
+            -delegatedPermissionIds $delegatedPermissionIds `
+            -remote $true
+    }
+
+    return $preAuthorizedApplications
 }
 
 function add-servicePrincipal($webApp, $assignmentRequired) {
@@ -337,7 +437,7 @@ function add-servicePrincipalGrants($servicePrincipalNa, $servicePrincipal) {
     assert-notNull $AADServicePrincipalId 'aad app service principal enumeration failed'
     $global:currentGrants = get-oauthPermissionGrants($servicePrincipalNa.Id)
     $result = $currentGrants
-    
+
     $scope = "User.Read"
     if (!$currentGrants -or !($currentGrants.scope.Contains($scope))) {
         $result = add-servicePrincipalGrantScope -clientId $servicePrincipalNa.Id -resourceId $AADServicePrincipalId -scope $scope
@@ -366,9 +466,9 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
     assert-notNull $result "aad app service principal oauth permissions $scope configuration failed"
 
     if ($result) {
-        $stopTime = set-stopTime $timeoutMin
+        $stopTime = set-stopTime $TimeoutMin
         $checkGrants = $null
-        
+
         while (!$checkGrants -or !($checkGrants.scope.Contains($scope))) {
             $checkGrants = wait-forResult -functionPointer (get-item function:\get-oauthPermissionGrants) `
                 -message "waiting for service principal grants creation completion" `
@@ -381,119 +481,45 @@ function add-servicePrincipalGrantScope($clientId, $resourceId, $scope) {
     return $result
 }
 
-function enable-AAD() {
-    Write-Host 'TenantId = ' $TenantId
-    $configObj.ClusterName = $clusterName
-    $configObj.TenantId = $TenantId
-    $webApp = $null
+function confirm-visualStudioAccess($webApp, [guid]$oauthPermissionsId) {
+    $preAuthorizedApplications = get-preauthorizedApplications -webApp $webApp -applicationIds $visualStudioClientIds -delegatedPermissionIds @($oauthPermissionsId)
+    if ($preAuthorizedApplications) {
+        write-host "visual studio preauthorized applications already exists."
+        # todo: should we remove if $AddVisualStudioAccess is false?
+        if (!$AddVisualStudioAccess) {
+            $remove = $true
 
-    if (!$webApplicationName) {
-        $webApplicationName = "ServiceFabricCluster"
+            if (!$Force) {
+                $remove = (read-host "Do you want to remove visual studio preauthorized applications? (y/n)") -ieq 'y'
+            }
+
+            if ($remove) {
+                write-host "removing visual studio preauthorized applications" -ForegroundColor Yellow
+                remove-preauthorizedApplications -webApp $webApp -applicationIds $visualStudioClientIds -delegatedPermissionIds @($oauthPermissionsId)
+                return
+            }
+        }
     }
-    
-    if (!$WebApplicationUri) {
-        $WebApplicationUri = "https://ServiceFabricCluster"
-    }
-    
-    if (!$NativeClientApplicationName) {
-        $NativeClientApplicationName = "ServiceFabricClusterNativeClient"
-    }
-
-    # MS Graph access User.Read
-    $requiredResourceAccess = @(@{
-            resourceAppId  = $msGraphUserReadAppId
-            resourceAccess = @(@{
-                    id   = $msGraphUserReadId
-                    type = "Scope"
-                })
-        })
-
-    # cleanup
-    if ($remove) {
-        write-host "removing web service principals"
-        $result = remove-servicePrincipal
-    
-        write-host "removing web service principals"
-        $result = $result -and (remove-servicePrincipalNa)
-
-        write-warning "removing app registration"
-        $result = $result -and (remove-appRegistration -WebApplicationUri $WebApplicationUri)
-
-        write-warning "removing native app registration"
-        $result = $result -and (remove-nativeClient -nativeClientApplicationName $NativeClientApplicationName)
-        write-host "removal complete result:$result" -ForegroundColor Green
-        return $configObj
-    }
-    
-    # check / add app registration
-    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri
-    if (!$webApp) {
-        $webApp = add-appRegistration -WebApplicationUri $WebApplicationUri `
-            -SpaApplicationReplyUrl $SpaApplicationReplyUrl `
-            -requiredResourceAccess $requiredResourceAccess
+    else {
+        write-host "visual studio preauthorized applications do not exist."
     }
 
-    assert-notNull $webApp 'Web Application Creation Failed'
-    $configObj.WebAppId = $webApp.appId
-    Write-Host "Web Application Created: $($webApp.appId)"
-
-    # check / add oauth user_impersonation permissions
-    $oauthPermissionsId = get-OauthPermissions -webApp $webApp
-    if (!$oauthPermissionsId) {
-        $oauthPermissionsId = add-oauthPermissions -webApp $webApp -WebApplicationName $webApplicationName
+    if (!$preAuthorizedApplications -and $AddVisualStudioAccess) {
+        write-host "adding visual studio preauthorized applications" -ForegroundColor Green
+        # check / add preauthorized applications
+        $preAuthorizedApplications = add-preauthorizedApplications -webApp $webApp -applicationIds $visualStudioClientIds -delegatedPermissionIds @($oauthPermissionsId)
+        assert-notNull $preAuthorizedApplications 'Web Application preauthorized applications Failed'
+        Write-Host "Web Application preauthorized applications created: $($preAuthorizedApplications|convertto-json)"  -ForegroundColor Green
     }
-    assert-notNull $oauthPermissionsId 'Web Application Oauth permissions Failed'
-    Write-Host "Web Application Oauth permissions created: $($oauthPermissionsId|convertto-json)"  -ForegroundColor Green
-
-    # check / add servicePrincipal
-    $servicePrincipal = get-servicePrincipal -webApp $webApp
-    if (!$servicePrincipal) {
-        $servicePrincipal = add-servicePrincipal -webApp $webApp -assignmentRequired $true
+    else {
+        write-host "visual studio preauthorized applications not do not need to be modified." -ForegroundColor Yellow
     }
-    assert-notNull $servicePrincipal 'service principal configuration failed'
-    Write-Host "Service Principal Created: $($servicePrincipal.appId)" -ForegroundColor Green
-    $configObj.ServicePrincipalId = $servicePrincipal.Id
-
-    # check / add native app
-    $nativeApp = get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri
-    if (!$nativeApp) {
-        $nativeApp = add-nativeClient -webApp $webApp -requiredResourceAccess $requiredResourceAccess -oauthPermissionsId $oauthPermissionsId
-    }
-    assert-notNull $nativeApp 'Native Client Application Creation Failed'
-    Write-Host "Native Client Application Created: $($nativeApp.appId)"  -ForegroundColor Green
-    $configObj.NativeClientAppId = $nativeApp.appId
-
-    # check / add native app service principal
-    $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp
-    if (!$servicePrincipalNa) {
-        $servicePrincipalNa = add-servicePrincipal -webApp $nativeApp -assignmentRequired $false
-    }
-    assert-notNull $servicePrincipalNa 'native app service principal configuration failed'
-    Write-Host "Native app service principal created: $($servicePrincipalNa.appId)" -ForegroundColor Green
-
-    # check / add native app service principal AAD
-    $servicePrincipalAAD = add-servicePrincipalGrants -servicePrincipalNa $servicePrincipalNa `
-        -servicePrincipal $servicePrincipal
-
-    assert-notNull $servicePrincipalAAD 'aad app service principal configuration failed'
-    Write-Host "AAD Application Configured: $($servicePrincipalAAD)"  -ForegroundColor Green
-    write-host "configobj: $($configObj|convertto-json)"
-
-    #ARM template AAD resource
-    write-host "-----ARM template-----"
-    write-host "`"azureActiveDirectory`": $(@{
-        tenantId           = $configObj.tenantId
-        clusterApplication = $configObj.WebAppId
-        clientApplication  = $configObj.NativeClientAppId
-    } | ConvertTo-Json)," -ForegroundColor Cyan
-
-    return $configObj
 }
 
 function get-appRegistration($WebApplicationUri) {
     # check for existing app by identifieruri
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"identifierUris:$WebApplicationUri`"")
-   
+
     $webApp = (invoke-graphApi -uri $uri -method 'get').value
     write-host "currentAppRegistration:$webApp"
 
@@ -506,10 +532,26 @@ function get-appRegistration($WebApplicationUri) {
     return $null
 }
 
+function get-appRegistrationById([guid]$applicationId) {
+    # get existing application by 'id'
+    $uri = [string]::format($graphAPIFormat, "applications/$($applicationId)")
+    $webApp = (invoke-graphApi -uri $uri -method 'get')
+    
+    if ($webApp) {
+        write-verbose "currentAppRegistration:$($webApp|convertto-json -depth 99)"
+        return $webApp
+    }
+    else {
+        write-error "$uri does not exist."
+    }
+
+    return $null
+}
+
 function get-nativeClient($NativeClientApplicationName) {
     # check for existing native clinet
     $uri = [string]::Format($graphAPIFormat, "applications?`$search=`"displayName:$NativeClientApplicationName`"")
-   
+
     $nativeClient = (invoke-graphApi -uri $uri -method 'get').value
     write-host "nativeClient:$nativeClient"
 
@@ -522,7 +564,7 @@ function get-nativeClient($NativeClientApplicationName) {
     return $null
 }
 
-function get-OauthPermissions($webApp) {
+function get-oauthPermissions($webApp) {
     # Check for an existing delegated permission with value "user_impersonation". Normally this is created by default,
     # but if it isn't, we need to update the Application object with a new one.
     $user_impersonation_scope = $webApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq "user_impersonation" }
@@ -536,11 +578,44 @@ function get-OauthPermissions($webApp) {
 }
 
 function get-oauthPermissionGrants($clientId) {
-    # get 'Windows Azure Active Directory' app registration by well-known appId
+    # get 'Entra' app registration by well-known appId
     $uri = [string]::Format($graphAPIFormat, "oauth2PermissionGrants") + "?`$filter=clientId eq '$clientId'"
     $grants = invoke-graphApi -uri $uri -method 'get'
     write-verbose "grants:$($grants | convertto-json -depth 2)"
     return $grants.value
+}
+
+function get-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]]$delegatedPermissionIds = $null, [bool]$remote = $false) {
+    # check for existing preauthorized applications
+    $tempWebApp = $webApp
+    if ($remote) {
+        write-verbose "getting remote preauthorized applications"
+        $tempWebApp = get-appRegistrationById -applicationId $webApp.id
+        if ($webApp.api.preAuthorizedApplications -ine $tempWebApp.api.preAuthorizedApplications) {
+            write-warning "preAuthorizedApplications are different. Using remote preAuthorizedApplications"
+            #$webApp.api.preAuthorizedApplications = $tempWebApp.api.preAuthorizedApplications
+        }
+    }
+    
+    $preAuthorizedApplications = $tempWebApp.api.preAuthorizedApplications | Where-Object {
+        $psitem.appId -in $applicationIds
+    }
+
+    if ($preAuthorizedApplications -and $delegatedPermissionIds) {
+        $preAuthorizedApplications = $preAuthorizedApplications | Where-Object {
+            $psitem.delegatedPermissionIds -like $delegatedPermissionIds
+        }
+    }
+
+    write-host "preAuthorizedApplications:$preAuthorizedApplications"
+
+    if ($preAuthorizedApplications.count -eq $applicationIds.count) {
+        write-host "preAuthorizedApplications already exists. $($filter)" -foregroundcolor yellow
+        write-host "current preAuthorizedApplications:$($preAuthorizedApplications|convertto-json -depth 99)"
+        return $preAuthorizedApplications
+    }
+
+    return $null
 }
 
 function get-servicePrincipal($webApp) {
@@ -559,7 +634,7 @@ function get-servicePrincipal($webApp) {
 }
 
 function get-servicePrincipalAAD() {
-    # get 'Windows Azure Active Directory' app registration by well-known appId
+    # get 'Entra' app registration by well-known appId
     $uri = [string]::Format($graphAPIFormat, "servicePrincipals") + "?`$filter=appId eq '$msGraphUserReadAppId'"
     $global:AADServicePrincipal = invoke-graphApi -uri $uri -method 'get'
     write-verbose "aad service princiapal:$($AADServicePrincipal | convertto-json -depth 2)"
@@ -571,9 +646,9 @@ function remove-appRegistration($WebApplicationUri) {
     $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri
     if (!$webApp) {
         return $true
-    } 
+    }
 
-    $configObj.WebAppId = $webApp.appId
+    $ConfigObj.WebAppId = $webApp.appId
     $uri = [string]::Format($graphAPIFormat, "applications/$($webApp.id)")
     $webApp = (invoke-graphApi -uri $uri -method 'delete')
 
@@ -599,7 +674,7 @@ function remove-nativeClient($NativeClientApplicationName) {
     $nativeApp = (invoke-graphApi -uri $uri -method 'delete')
 
     if ($nativeApp) {
-        $configObj.NativeClientAppId = $nativeApp.appId
+        $ConfigObj.NativeClientAppId = $nativeApp.appId
 
         $null = wait-forResult -functionPointer (get-item function:\invoke-graphApi) `
             -message "waiting for native client delete to complete..." `
@@ -611,6 +686,64 @@ function remove-nativeClient($NativeClientApplicationName) {
     return $true
 }
 
+function remove-preauthorizedApplications($webApp, [guid[]]$applicationIds, [guid[]]$delegatedPermissionIds) {
+    # remove preauthorized applications
+    if (!(get-preauthorizedApplications -webApp $webApp -applicationIds $applicationIds -delegatedPermissionIds $delegatedPermissionIds)) {
+        write-host "preauthorized applications do not exist." -ForegroundColor Green
+        return $webApp.api.preAuthorizedApplications
+    }
+
+    $uri = [string]::format($graphAPIFormat, "applications/$($webApp.Id)")
+    $preAuthorizedApplications = [collections.arraylist]::new()
+    [void]$preAuthorizedApplications.AddRange($webApp.api.preAuthorizedApplications)
+    
+    foreach ($applicationId in $applicationIds) {
+        # check for existing preauthorized applications and scrub permissions
+        $existingApplication = get-preauthorizedApplications -webApp $webApp -applicationIds $applicationId -delegatedPermissionIds $delegatedPermissionIds
+        if (!$existingApplication) {
+            continue
+        }
+
+        $scrubbedPermissions = [collections.arraylist]::new()
+        [void]$scrubbedPermissions.AddRange($existingApplication.delegatedPermissionIds)
+        
+        foreach ($existingPermission in $existingApplication.delegatedPermissionIds) {
+            if ($delegatedPermissionIds -contains $existingPermission) {
+                write-host "removing permission $existingPermission" -ForegroundColor Yellow
+                [void]$scrubbedPermissions.Remove($existingPermission)
+            }
+        }
+        
+        [void]$preAuthorizedApplications.Remove($existingApplication)
+
+        if ($scrubbedPermissions.Count -gt 0) {
+            $preAuthorizedApplications.Add(@{
+                    appId                  = $applicationId
+                    delegatedPermissionIds = $scrubbedPermissions
+                })
+        }
+    }
+    
+    $webApp.api.preAuthorizedApplications = $preAuthorizedApplications
+    $result = invoke-graphApi -retry -uri $uri -method 'patch' -body @{
+        'api' = @{
+            "preAuthorizedApplications" = $webApp.api.preAuthorizedApplications
+        }
+    }
+    
+    if ($result) {
+        $null = wait-forResult -functionPointer (get-item function:\get-preauthorizedApplications) `
+            -message "waiting for preauthorized applications completion" `
+            -waitForNullResult `
+            -webApp $webApp `
+            -applicationIds $applicationIds `
+            -delegatedPermissionIds $delegatedPermissionIds `
+            -remote $true
+    }
+    
+    return $preAuthorizedApplications
+}
+
 function remove-servicePrincipal() {
     $result = $true
     $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri
@@ -618,7 +751,7 @@ function remove-servicePrincipal() {
     if ($webApp) {
         $servicePrincipal = get-servicePrincipal -webApp $webApp
         if ($servicePrincipal) {
-            $configObj.ServicePrincipalId = $servicePrincipal.Id
+            $ConfigObj.ServicePrincipalId = $servicePrincipal.Id
             $uri = [string]::Format($graphAPIFormat, "servicePrincipals/$($servicePrincipal.id)")
             $result = $result -and (invoke-graphApi -uri $uri -method 'delete')
 
@@ -649,10 +782,123 @@ function remove-servicePrincipalNa() {
                     -waitForNullResult `
                     -webApp $nativeApp
             }
-        }    
+        }
     }
 
     return $result
+}
+
+function setup-Applications() {
+    Write-Host 'TenantId = ' $TenantId
+    $ConfigObj.ClusterName = $ClusterName
+    $ConfigObj.TenantId = $TenantId
+    $webApp = $null
+
+    if (!$webApplicationName) {
+        $webApplicationName = "ServiceFabricCluster"
+    }
+
+    if (!$WebApplicationUri) {
+        $WebApplicationUri = "https://ServiceFabricCluster"
+    }
+
+    if (!$NativeClientApplicationName) {
+        $NativeClientApplicationName = "ServiceFabricClusterNativeClient"
+    }
+
+    # MS Graph access User.Read
+    $requiredResourceAccess = @(@{
+            resourceAppId  = $msGraphUserReadAppId
+            resourceAccess = @(@{
+                    id   = $msGraphUserReadId
+                    type = "Scope"
+                })
+        })
+
+    # cleanup
+    if ($Remove) {
+        write-host "removing web service principals"
+        $result = remove-servicePrincipal
+
+        write-host "removing web service principals"
+        $result = $result -and (remove-servicePrincipalNa)
+
+        write-warning "removing app registration"
+        $result = $result -and (remove-appRegistration -WebApplicationUri $WebApplicationUri)
+
+        write-warning "removing native app registration"
+        $result = $result -and (remove-nativeClient -nativeClientApplicationName $NativeClientApplicationName)
+
+        write-host "removal complete result:$result" -ForegroundColor Green
+        return $ConfigObj
+    }
+
+    # check / add app registration
+    $webApp = get-appRegistration -WebApplicationUri $WebApplicationUri
+    if (!$webApp) {
+        $webApp = add-appRegistration -WebApplicationUri $WebApplicationUri `
+            -SpaApplicationReplyUrl $SpaApplicationReplyUrl `
+            -requiredResourceAccess $requiredResourceAccess
+    }
+
+    assert-notNull $webApp 'Web Application Creation Failed'
+    $ConfigObj.WebAppId = $webApp.appId
+    Write-Host "Web Application Created: $($webApp.appId)"
+
+    # check / add oauth user_impersonation permissions
+    $oauthPermissionsId = get-oauthPermissions -webApp $webApp
+    if (!$oauthPermissionsId) {
+        $oauthPermissionsId = add-oauthPermissions -webApp $webApp -WebApplicationName $webApplicationName
+    }
+    assert-notNull $oauthPermissionsId 'Web Application Oauth permissions Failed'
+    Write-Host "Web Application Oauth permissions created: $($oauthPermissionsId|convertto-json)"  -ForegroundColor Green
+
+    # check / add visual studio preauthorized applications
+    confirm-visualStudioAccess -webApp $webApp -oauthPermissionsId $oauthPermissionsId
+
+    # check / add servicePrincipal
+    $servicePrincipal = get-servicePrincipal -webApp $webApp
+    if (!$servicePrincipal) {
+        $servicePrincipal = add-servicePrincipal -webApp $webApp -assignmentRequired $true
+    }
+    assert-notNull $servicePrincipal 'service principal configuration failed'
+    Write-Host "Service Principal Created: $($servicePrincipal.appId)" -ForegroundColor Green
+    $ConfigObj.ServicePrincipalId = $servicePrincipal.Id
+
+    # check / add native app
+    $nativeApp = get-nativeClient -NativeClientApplicationName $NativeClientApplicationName -WebApplicationUri $WebApplicationUri
+    if (!$nativeApp) {
+        $nativeApp = add-nativeClient -webApp $webApp -requiredResourceAccess $requiredResourceAccess -oauthPermissionsId $oauthPermissionsId
+    }
+    assert-notNull $nativeApp 'Native Client Application Creation Failed'
+    Write-Host "Native Client Application Created: $($nativeApp.appId)"  -ForegroundColor Green
+    $ConfigObj.NativeClientAppId = $nativeApp.appId
+
+    # check / add native app service principal
+    $servicePrincipalNa = get-servicePrincipal -webApp $nativeApp
+    if (!$servicePrincipalNa) {
+        $servicePrincipalNa = add-servicePrincipal -webApp $nativeApp -assignmentRequired $false
+    }
+    assert-notNull $servicePrincipalNa 'native app service principal configuration failed'
+    Write-Host "Native app service principal created: $($servicePrincipalNa.appId)" -ForegroundColor Green
+
+    # check / add native app service principal AAD
+    $servicePrincipalAAD = add-servicePrincipalGrants -servicePrincipalNa $servicePrincipalNa `
+        -servicePrincipal $servicePrincipal
+
+    assert-notNull $servicePrincipalAAD 'aad app service principal configuration failed'
+    Write-Host "AAD Application Configured: $($servicePrincipalAAD)"  -ForegroundColor Green
+    write-host "ConfigObj: $($ConfigObj|convertto-json)"
+
+    #ARM template AAD resource
+    write-host "-----ARM template-----"
+    write-host "`"azureActiveDirectory`": $(@{
+        tenantId           = $ConfigObj.tenantId
+        clusterApplication = $ConfigObj.WebAppId
+        clientApplication  = $ConfigObj.NativeClientAppId
+    } | ConvertTo-Json)," -ForegroundColor Cyan
+
+    return $ConfigObj
 }
 
 main
